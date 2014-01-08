@@ -6,5 +6,5 @@ clean:
 	rm -f smoke-grid-*.ppm util-test smoke-grid
 smoke-grid-play: smoke-grid
 	./smoke-grid
-	ffplay smoke-grid-%04d.ppm
+	ffplay -framerate 10 -vf scale=-1:500 smoke-grid-%04d.ppm
 .PHONY: clean smoke-grid-play

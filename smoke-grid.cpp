@@ -8,9 +8,26 @@
 #include <algorithm>
 #include "util.hpp"
 
-grid diffuse(const grid& a0, double mu){
-	grid a = a0;
+void set_boundary(grid& a, double val){
+	for (int i = 0; i < a.size(); ++i)
+		a[i][0] = a[i][a[i].size()-1] = 0;
+	for (int j = 0; j < a[0].size(); ++j)
+		a[0][j] = a[a.size()-1][j]= 0;
+}
 
+grid diffuse(const grid& a0, double mu, double boundary){
+	grid a = a0;
+	for (int t = 0; t < 20; ++t){
+		for (int i = 1; i+1 < a0.size(); ++i)
+			for (int j = 1; j+1 < a0[i].size(); ++j)
+				a[i][j] = (a0[i][j] + mu*(
+							+ a[i-1][j  ]
+							+ a[i+1][j  ]
+							+ a[i  ][j-1]
+							+ a[i  ][j+1]
+							))/(1+4*mu);
+		set_boundary(a, boundary);
+	}
 	return a;
 }
 
@@ -28,8 +45,8 @@ int main(){
 	for (int i = N/4; i < 3*N/4; ++i)
 		for (int j = M/4; j <= 3*M/4; ++j)
 			s[i][j] = .1; // smoke in middle quarter
-	for (int i = 0; i < M; ++i)
-		fx[0][i] = .2; // wind on the left
+	for (int i = 0; i < M/2; ++i)
+		fx[1][i] = .2; // wind on the left
 	for (int t = 0; t < 100; ++t){
 		// 1. add forces
 		for (int i = 0; i < N; ++i)
@@ -40,13 +57,10 @@ int main(){
 			}
 
 		// 2. diffuse, 3. advect
-		grid np  = advect(diffuse(p , mu), dx, dy);
-		grid ndx = advect(diffuse(dx, mu), dx, dy);
-		grid ndy = advect(diffuse(dy, mu), dx, dy);
-		for (int i = 0; i < N; ++i) // clear boundaries
-			np[i][0] = 0;
-		for (int j = 0; j < M; ++j)
-			np[0][j] = 0;
+		grid np  = advect(diffuse(p , mu, 0), dx, dy);
+		grid ndx = advect(diffuse(dx, mu, 0), dx, dy);
+		grid ndy = advect(diffuse(dy, mu, 0), dx, dy);
+		set_boundary(np, 0);
 
 		// copy frame
 		p = std::move(np); dx = std::move(ndx); dy = std::move(ndy);
