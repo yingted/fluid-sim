@@ -49,8 +49,8 @@ std::istream& operator>>(std::istream& is, std::vector<E>& vec){
 
 typedef std::vector<std::vector<double> > grid;
 
-extern inline grid make_grid(const size_t N, const size_t M){
-	return std::vector<std::vector<double> > (N, std::vector<double> (M));
+extern inline grid make_grid(const size_t N, const size_t M, double val=0){
+	return std::move(std::vector<std::vector<double> > (N, std::vector<double> (M, val)));
 }
 
 #endif
