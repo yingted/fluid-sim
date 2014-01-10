@@ -5,10 +5,10 @@ smoke-grid: smoke-grid.cpp util.hpp
 	g++ -std=c++11 -o smoke-grid{,.cpp}
 clean:
 	rm -f smoke-grid{,-*.ppm,.ogg} util-test
-smoke-grid-0000.ppm: smoke-grid
+smoke-grid-0001.ppm: smoke-grid
 	./smoke-grid
 smoke-grid-play: smoke-grid
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 smoke-grid-%04d.ppm
-%.ogg: %-0000.ppm
+%.ogg: %-0001.ppm
 	ffmpeg $(FFMPEG_FLAGS) -i smoke-grid-%04d.ppm $@
 .PHONY: clean smoke-grid-play
