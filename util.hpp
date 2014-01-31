@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <stdexcept>
 
 template<typename E>
 std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
@@ -51,6 +52,15 @@ typedef std::vector<std::vector<double> > grid;
 
 extern inline grid make_grid(const size_t N, const size_t M, double val=0){
 	return std::move(std::vector<std::vector<double> > (N, std::vector<double> (M, val)));
+}
+
+template<typename E>
+std::vector<E>& operator+=(std::vector<E>& lhs, const std::vector<E>& rhs){
+	if (lhs.size() != rhs.size())
+		throw std::invalid_argument("adding vectors of different sizes");
+	for (int i = 0; i < lhs.size(); ++i)
+		lhs[i] += rhs[i];
+	return lhs;
 }
 
 #endif

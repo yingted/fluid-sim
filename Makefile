@@ -7,7 +7,7 @@ clean:
 	rm -f smoke-grid{,-*.ppm,.ogg} util-test
 smoke-grid-0001.ppm: smoke-grid
 	./smoke-grid
-smoke-grid-play: smoke-grid
+smoke-grid-play: smoke-grid-0001.ppm
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 smoke-grid-%04d.ppm
 %.ogg: %-0001.ppm
 	ffmpeg $(FFMPEG_FLAGS) -i smoke-grid-%04d.ppm $@
