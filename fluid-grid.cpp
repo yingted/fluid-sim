@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
 #include <algorithm>
 #include "util.hpp"
 
@@ -58,6 +59,14 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 	return std::move(a);
 }
 
+void advect(vector<double> mx, vector<double> my, const grid& dx, const grid& dy){
+	// TODO implement
+}
+
+void update_state(vector<vector<bool> >& state, const vector<double> mx, const vector<double> my){
+	// TODO implement
+}
+
 void project(grid& dx, grid& dy){
 	grid div = make_grid(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
@@ -92,31 +101,28 @@ int main(){
 	int N = 50, M = 50;
 	double mu = .1;
 	// coordinates: math-style
-	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), p = make_grid(N, M), fx = dx, fy = dy, s = p;
-	for (int i = 0; i < 3; ++i)
-		for (int j = 0; j < 3; ++j)
-			s[N/3+i][M/4+j] = .1;
+	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
+	vector<double> mx = vector<double>(), my = vector<double>();
+	vector<vector<bool> > state = vector<vector<bool> >(N, vector<bool>(M));
+	for (int i = 0; i < 2*3; ++i)
+		for (int j = 0; j < 2*3; ++j){
+			mx.push_back(N/3+i*.5+.25*rand()/RAND_MAX);
+			my.push_back(M/4+j*.5+.25*rand()/RAND_MAX);
+		}
+	update_state(state, mx, my);
 	for (int j = 1; j < M/2; ++j)
 		fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < 100; ++t){
-		// 1. add forces
+		// add forces
 		dx += fx;
 		dy += fy;
-		p  += s ;
 
-		// 2. diffusion
-		dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
-		dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
-		p  = diffusion(p , mu, 0, BOUNDARY_BORDER);
-		set_boundary(p, 0, BOUNDARY_BORDER);
-		project(dx, dy);
-
-		//3. advection
+		// advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
-		p  = advection(p , dx, dy, .5, .5, BOUNDARY_BORDER);
-		set_boundary(p, 0, BOUNDARY_BORDER);
 		project(dx, dy);
+		advect(mx, my, dx, dy);
+		update_state(state, mx, my);
 
 		// write output
 		char *name;
@@ -129,7 +135,7 @@ int main(){
 		f << "P3\n" << N << ' ' << M << "\n" << peak << "\n";
 		for (int j = M-1; j >=0; --j){
 			for (int i = 0; i < N; ++i)
-				for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), p[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
+				for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), state[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
 				//for (const double& val : {p[i][j]*2-dpeak, p[i][j]*2-dpeak, p[i][j]*2-dpeak}) // grey
 					f << (unsigned short)(std::max(0., std::min((double)peak, round((val+1)/2/dpeak*peak)))) << ' ';
 			f << '\n';
