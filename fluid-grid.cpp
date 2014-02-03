@@ -23,6 +23,15 @@ void set_boundary(grid& a, double val, int type){
 	}
 }
 
+double sample(const grid& a, double x, double y){
+	double pi = std::max(0., std::min(nextafter(a   .size()-1, 0), x)), // coords
+	       pj = std::max(0., std::min(nextafter(a[0].size()-1, 0), y));
+	int ii = floor(pi), ij = floor(pj);
+	double s = pi-ii, t = pj-ij;
+	return (1-s)*((1-t)*a[ii  ][ij]+t*a[ii  ][ij+1])
+	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
+}
+
 grid diffusion(const grid& a0, double mu, double boundary, int type){
 	assert (!a0.empty() && !a0[0].empty());
 	grid a = a0;
@@ -43,16 +52,8 @@ grid diffusion(const grid& a0, double mu, double boundary, int type){
 grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double oy, int type){
 	grid a = a0;
 	for (int i = 1; i+1 < a0.size(); ++i)
-		for (int j = 1; j+1 < a0[i].size(); ++j){
-			double cur_dx = (1-ox)*dx[i][j]+ox*dx[i+1][j  ],
-			       cur_dy = (1-oy)*dy[i][j]+oy*dy[i  ][j+1],
-			       pi = std::max(0., std::min(nextafter(a0   .size()-1, 0), i-cur_dx)), // coords
-			       pj = std::max(0., std::min(nextafter(a0[0].size()-1, 0), j-cur_dy));
-			int ii = floor(pi), ij = floor(pj);
-			double s = pi-ii, t = pj-ij;
-			a[i][j] = (1-s)*((1-t)*a[ii  ][ij]+t*a[ii  ][ij+1])
-			          +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
-		}
+		for (int j = 1; j+1 < a0[i].size(); ++j)
+			a[i][j] = sample(a, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
 	set_boundary(a, 0, type);
 	return std::move(a);
 }
