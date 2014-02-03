@@ -106,9 +106,9 @@ int main(){
 		// 2. diffusion
 		dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
 		dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
+		project(dx, dy);
 		p  = diffusion(p , mu, 0, BOUNDARY_BORDER);
 		set_boundary(p, 0, BOUNDARY_BORDER);
-		project(dx, dy);
 
 		//3. advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
