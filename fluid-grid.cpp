@@ -59,7 +59,7 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 	return std::move(a);
 }
 
-void advect(std::vector<double> mx, std::vector<double> my, const grid& dx, const grid& dy){
+void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, const grid& dy){
 	for (int i = 0; i < mx.size(); ++i){
 		const double cur_dx = sample(dx, mx[i], my[i]),
 		             cur_dy = sample(dy, mx[i], my[i]);
@@ -108,7 +108,7 @@ void project(grid& dx, grid& dy){
 
 int main(){
 	int N = 50, M = 50;
-	double mu = .1;
+	double mu = .1, g = -.05;
 	// coordinates: math-style
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
@@ -125,6 +125,9 @@ int main(){
 		// add forces
 		dx += fx;
 		dy += fy;
+		for (int i = 0; i < dy.size(); ++i)
+			for (int j = 0; j < dy[0].size(); ++j)
+				dy[i][j] += g * state[i][j];
 
 		// advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
