@@ -54,17 +54,26 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 	grid a = a0;
 	for (int i = 1; i+1 < a0.size(); ++i)
 		for (int j = 1; j+1 < a0[i].size(); ++j)
-			a[i][j] = sample(a, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
+			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
 	set_boundary(a, 0, type);
 	return std::move(a);
 }
 
-void advect(vector<double> mx, vector<double> my, const grid& dx, const grid& dy){
-	// TODO implement
+void advect(std::vector<double> mx, std::vector<double> my, const grid& dx, const grid& dy){
+	for (int i = 0; i < mx.size(); ++i){
+		const double cur_dx = sample(dx, mx[i], my[i]),
+		             cur_dy = sample(dy, mx[i], my[i]);
+		mx[i] += cur_dx;
+		my[i] += cur_dy;
+	}
 }
 
-void update_state(vector<vector<bool> >& state, const vector<double> mx, const vector<double> my){
-	// TODO implement
+void update_state(std::vector<std::vector<bool> >& state, const std::vector<double> mx, const std::vector<double> my){
+	for (std::vector<bool>& row : state)
+		for (auto cell : row)
+			cell = false;
+	for (int i = 0; i < mx.size(); ++i)
+		state[std::max(0, std::min((int)state.size(), (int)mx[i]))][std::max(0, std::min((int)state[0].size(), (int)my[i]))] = true;
 }
 
 void project(grid& dx, grid& dy){
@@ -102,8 +111,8 @@ int main(){
 	double mu = .1;
 	// coordinates: math-style
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
-	vector<double> mx = vector<double>(), my = vector<double>();
-	vector<vector<bool> > state = vector<vector<bool> >(N, vector<bool>(M));
+	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
+	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
 	for (int i = 0; i < 2*3; ++i)
 		for (int j = 0; j < 2*3; ++j){
 			mx.push_back(N/3+i*.5+.25*rand()/RAND_MAX);
