@@ -50,8 +50,8 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 			       pj = std::max(0., std::min(nextafter(a0[0].size()-1, 0), j-cur_dy));
 			int ii = floor(pi), ij = floor(pj);
 			double s = pi-ii, t = pj-ij;
-			a[i][j] = (1-s)*((1-t)*a[ii  ][ij]+t*a[ii  ][ij+1])
-			          +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
+			a[i][j] = (1-s)*((1-t)*a0[ii  ][ij]+t*a0[ii  ][ij+1])
+			          +  s *((1-t)*a0[ii+1][ij]+t*a0[ii+1][ij+1]);
 		}
 	set_boundary(a, 0, type);
 	return std::move(a);
