@@ -77,22 +77,38 @@ void update_state(std::vector<std::vector<bool> >& state, const std::vector<doub
 }
 
 void project(grid& dx, grid& dy){
+	set_boundary(dx, 0, BOUNDARY_VERTICAL);
+	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
+
 	grid div = make_grid(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
 		for (int j = 0; j < div[i].size(); ++j)
 			div[i][j] = (dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j])/2;
-	set_boundary(div, 0, BOUNDARY_BORDER);
 
 	for (int t = 0; t < 20; ++t){
-		for (int i = 1; i+1 < p.size(); ++i)
-			for (int j = 1; j+1 < p.size(); ++j)
-				p[i][j] = (div[i][j]+
-					+p[i-1][j  ]
-					+p[i+1][j  ]
-					+p[i  ][j-1]
-					+p[i  ][j+1]
-					)/4;
-		set_boundary(p, 0, BOUNDARY_BORDER);
+		const grid p0 = p;
+		for (int i = 0; i < p.size(); ++i)
+			for (int j = 0; j < p[i].size(); ++j){
+				p[i][j] = div[i][j];
+				int count = 0;
+				if (i > 0){
+					p[i][j] += p0[i-1][j  ];
+					++count;
+				}
+				if (i+1 < p.size()){
+					p[i][j] += p0[i+1][j  ];
+					++count;
+				}
+				if (j > 0){
+					p[i][j] += p0[i  ][j-1];
+					++count;
+				}
+				if (j+1 < p[i].size()){
+					p[i][j] += p0[i  ][j+1];
+					++count;
+				}
+				p[i][j] /= count;
+			}
 	}
 
 	for (int i = 1; i+1 < dx.size(); ++i)
@@ -101,9 +117,6 @@ void project(grid& dx, grid& dy){
 	for (int i = 0; i < dy.size(); ++i)
 		for (int j = 1; j+1 < dy[i].size(); ++j)
 			dy[i][j] += (p[i][j]-p[i][j-1])/2;
-
-	set_boundary(dx, 0, BOUNDARY_VERTICAL);
-	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 }
 
 int main(){
