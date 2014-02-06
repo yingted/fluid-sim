@@ -113,10 +113,10 @@ int main(){
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
-	for (int i = 0; i < 2*3; ++i)
-		for (int j = 0; j < 2*3; ++j){
-			mx.push_back(N/3+i*.5+.25*rand()/RAND_MAX);
-			my.push_back(M/4+j*.5+.25*rand()/RAND_MAX);
+	for (int i = 2*(M/4); i < 2*(M/2); ++i)
+		for (int j = 2*(N/4); j < 2*(3*N/4); ++j){
+			mx.push_back(i*.5+.25*rand()/RAND_MAX);
+			my.push_back(j*.5+.25*rand()/RAND_MAX);
 		}
 	update_state(state, mx, my);
 	for (int j = 1; j < M/2; ++j)
