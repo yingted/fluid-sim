@@ -5,6 +5,11 @@
 #include <vector>
 #include <string>
 #include <stdexcept>
+#include <climits>
+extern "C"{
+#include <cblas.h>
+}
+#include <sparse_matrix.h>
 
 template<typename E>
 std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
@@ -16,6 +21,32 @@ std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
 	if (next != ',') // eat trailing comma
 		os << next;
 	return os << "]";
+}
+
+template<typename E>
+std::ostream& operator<<(std::ostream& os, const SparseMatrix<E>& mat){
+	os << "{\"index\":" << mat.index << ",\"value\":" << mat.value << "}" << std::endl;
+}
+
+void _print_array_contents(std::ostream& os){
+}
+
+template<typename E>
+void _print_array_contents(std::ostream& os, const E& elt){
+	os << elt;
+}
+
+template<typename E, typename... Args>
+void _print_array_contents(std::ostream& os, const E& elt, const Args&... rest){
+	os << elt << ',';
+	_print_array_contents(os, rest...);
+}
+
+template<typename... Args>
+void rpc(const std::string& method, const Args&... params){ // call python
+	std::cout << "{\"method\":" << method << ",\"params\":[";
+	_print_array_contents(std::cout, params...);
+	std::cout << "]}";
 }
 
 std::istream& operator>>(std::istream& is, char ch){

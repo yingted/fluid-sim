@@ -8,10 +8,6 @@
 #include <cstdlib>
 #include <algorithm>
 #include "util.hpp"
-#include <climits>
-extern "C"{
-#include <cblas.h>
-}
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
 
@@ -106,31 +102,31 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 				continue; // p = 0 by default
 			const unsigned int ij = row[i][j];
 			std::vector<unsigned int>indices;
-			rhs[ij] = div[i][j];
 			indices.push_back(ij);
-			int divisor = 0;
+			int neighbours = 0;
 			if (i > 0){
 				if (state[i-1][j])
 					indices.push_back(row[i-1][j]);
-				++divisor;
+				++neighbours;
 			}
 			if (i+1 < p.size()){
 				if (state[i+1][j])
 					indices.push_back(row[i+1][j]);
-				++divisor;
+				++neighbours;
 			}
 			if (j > 0){
 				if (state[i][j-1])
 					indices.push_back(row[i][j-1]);
-				++divisor;
+				++neighbours;
 			}
 			if (j+1 < p[i].size()){
 				if (state[i][j+1])
 					indices.push_back(row[i][j+1]);
-				++divisor;
+				++neighbours;
 			}
-			std::vector<double>values(indices.size(), -1./divisor);
-			values[0] = 1;
+			std::vector<double>values(indices.size(), -1);
+			values[0] = neighbours;
+			rhs[ij] = div[i][j]*neighbours;
 			mat.add_sparse_row(ij, indices, values);
 		}
 
@@ -139,11 +135,12 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 	int iterations;
 	bool success = PCGSolver<double>().solve(mat, rhs, result, residual, iterations);
 	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
+	rpc("check_symmetric", mat);
 
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j)
 			if (state[i][j])
-				p[i][j] = result[row[i][j]];
+				p[i][j] = result[row[i][j]]; // divisor = neighbours
 
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
