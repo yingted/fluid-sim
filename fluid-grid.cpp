@@ -8,6 +8,12 @@
 #include <cstdlib>
 #include <algorithm>
 #include "util.hpp"
+#include <climits>
+extern "C"{
+#include <cblas.h>
+}
+#include <sparse_matrix.h>
+#include <pcg_solver.h>
 
 #define BOUNDARY_VERTICAL (1)
 #define BOUNDARY_HORIZONTAL (2)
@@ -85,33 +91,59 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 		for (int j = 0; j < div[i].size(); ++j)
 			div[i][j] = (dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j])/2;
 
-	for (int t = 0; t < 1000; ++t){
-		const grid p0 = p;
-		for (int i = 0; i < p.size(); ++i)
-			for (int j = 0; j < p[i].size(); ++j){
-				if (!state[i][j])
-					continue; // p = 0 by default
-				p[i][j] = div[i][j];
-				int count = 0;
-				if (i > 0){
-					p[i][j] += p0[i-1][j  ];
-					++count;
-				}
-				if (i+1 < p.size()){
-					p[i][j] += p0[i+1][j  ];
-					++count;
-				}
-				if (j > 0){
-					p[i][j] += p0[i  ][j-1];
-					++count;
-				}
-				if (j+1 < p[i].size()){
-					p[i][j] += p0[i  ][j+1];
-					++count;
-				}
-				p[i][j] /= count;
+	std::vector<std::vector<unsigned int> >row(p.size(), std::vector<unsigned int>(p[0].size(), -1)); // row for i, j
+	unsigned int count = 0;
+	for (int i = 0; i < p.size(); ++i)
+		for (int j = 0; j < p[i].size(); ++j)
+			if (state[i][j])
+				row[i][j] = count++;
+	std::vector<double>rhs(count); // rhs for row
+	SparseMatrix<double>mat(count);
+
+	for (int i = 0; i < p.size(); ++i)
+		for (int j = 0; j < p[i].size(); ++j){
+			if (!state[i][j])
+				continue; // p = 0 by default
+			const unsigned int ij = row[i][j];
+			std::vector<unsigned int>indices;
+			rhs[ij] = div[i][j];
+			indices.push_back(ij);
+			int divisor = 0;
+			if (i > 0){
+				if (state[i-1][j])
+					indices.push_back(row[i-1][j]);
+				++divisor;
 			}
-	}
+			if (i+1 < p.size()){
+				if (state[i+1][j])
+					indices.push_back(row[i+1][j]);
+				++divisor;
+			}
+			if (j > 0){
+				if (state[i][j-1])
+					indices.push_back(row[i][j-1]);
+				++divisor;
+			}
+			if (j+1 < p[i].size()){
+				if (state[i][j+1])
+					indices.push_back(row[i][j+1]);
+				++divisor;
+			}
+			std::vector<double>values(indices.size(), -1./divisor);
+			values[0] = 1;
+			mat.add_sparse_row(ij, indices, values);
+		}
+
+	std::vector<double>result(count);
+	double residual;
+	int iterations;
+	bool success = PCGSolver<double>().solve(mat, rhs, result, residual, iterations);
+	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
+
+	for (int i = 0; i < p.size(); ++i)
+		for (int j = 0; j < p[i].size(); ++j)
+			if (state[i][j])
+				p[i][j] = result[row[i][j]];
 
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
