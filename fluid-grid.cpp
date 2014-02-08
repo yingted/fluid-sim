@@ -73,10 +73,10 @@ void update_state(std::vector<std::vector<bool> >& state, const std::vector<doub
 		for (auto cell : row)
 			cell = false;
 	for (int i = 0; i < mx.size(); ++i)
-		state[std::max(0, std::min((int)state.size(), (int)mx[i]))][std::max(0, std::min((int)state[0].size(), (int)my[i]))] = true;
+		state[std::max(0, std::min((int)state.size()-1, (int)mx[i]))][std::max(0, std::min((int)state[0].size()-1, (int)my[i]))] = true;
 }
 
-void project(grid& dx, grid& dy){
+void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 
@@ -85,10 +85,12 @@ void project(grid& dx, grid& dy){
 		for (int j = 0; j < div[i].size(); ++j)
 			div[i][j] = (dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j])/2;
 
-	for (int t = 0; t < 20; ++t){
+	for (int t = 0; t < 1000; ++t){
 		const grid p0 = p;
 		for (int i = 0; i < p.size(); ++i)
 			for (int j = 0; j < p[i].size(); ++j){
+				if (!state[i][j])
+					continue; // p = 0 by default
 				p[i][j] = div[i][j];
 				int count = 0;
 				if (i > 0){
@@ -113,10 +115,10 @@ void project(grid& dx, grid& dy){
 
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
-			dx[i][j] += (p[i][j]-p[i-1][j])/2;
+			dx[i][j] += p[i][j]-p[i-1][j];
 	for (int i = 0; i < dy.size(); ++i)
 		for (int j = 1; j+1 < dy[i].size(); ++j)
-			dy[i][j] += (p[i][j]-p[i][j-1])/2;
+			dy[i][j] += p[i][j]-p[i][j-1];
 }
 
 int main(){
@@ -126,14 +128,16 @@ int main(){
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
-	for (int i = 2*(M/4); i < 2*(M/2); ++i)
-		for (int j = 2*(N/4); j < 2*(3*N/4); ++j){
+	//for (int i = 2*(M/4); i < 2*(M/2); ++i)
+	//	for (int j = 2*(N/4); j < 2*(3*N/4); ++j){
+	for (int i = 2*0; i < 2*M; ++i)
+		for (int j = 2*0; j < 2*(N/2); ++j){
 			mx.push_back(i*.5+.25*rand()/RAND_MAX);
 			my.push_back(j*.5+.25*rand()/RAND_MAX);
 		}
 	update_state(state, mx, my);
-	for (int j = 1; j < M/2; ++j)
-		fx[3][j] = .2; // wind on the left
+	//for (int j = 1; j < M/2; ++j)
+	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < 100; ++t){
 		// add forces
 		dx += fx;
@@ -145,7 +149,7 @@ int main(){
 		// advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
-		project(dx, dy);
+		project(dx, dy, state);
 		advect(mx, my, dx, dy);
 		update_state(state, mx, my);
 
