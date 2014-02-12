@@ -36,7 +36,7 @@ double sample(const grid& a, double x, double y){
 	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
 }
 
-grid diffusion(const grid& a0, double mu, double boundary, int type){
+grid&& diffusion(const grid& a0, double mu, double boundary, int type){
 	assert (!a0.empty() && !a0[0].empty());
 	grid a = a0;
 	for (int t = 0; t < 20; ++t){
@@ -105,26 +105,21 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 			std::vector<unsigned int>indices;
 			indices.push_back(ij);
 			int neighbours = 0;
-			if (i > 0){
-				if (state[i-1][j])
-					indices.push_back(row[i-1][j]);
-				++neighbours;
-			}
-			if (i+1 < p.size()){
-				if (state[i+1][j])
-					indices.push_back(row[i+1][j]);
-				++neighbours;
-			}
-			if (j > 0){
-				if (state[i][j-1])
-					indices.push_back(row[i][j-1]);
-				++neighbours;
-			}
-			if (j+1 < p[i].size()){
-				if (state[i][j+1])
-					indices.push_back(row[i][j+1]);
-				++neighbours;
-			}
+#define CHECK(i,j) do{\
+	if (state[(i)][(j)]){\
+		indices.push_back(row[(i)][(j)]);\
+	}\
+	++neighbours;\
+}while(0)
+			if (i > 0)
+				CHECK(i-1,j);
+			if (i+1 < p.size())
+				CHECK(i+1,j);
+			if (j > 0)
+				CHECK(i,j-1);
+			if (j+1 < p[i].size())
+				CHECK(i,j+1);
+#undef CHECK
 			std::vector<double>values(indices.size(), -1);
 			values[0] = neighbours;
 			rhs[ij] = div[i][j]*neighbours;
@@ -151,6 +146,52 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 			dy[i][j] += p[i][j]-p[i][j-1];
 }
 
+std::vector<std::vector<bool> >&& dilation(grid data, std::vector<std::vector<bool> > mask, const double boundary=0, unsigned char layers=1){
+	std::vector<std::pair<int, int> >cur, next;
+	for (int i = 0; i < mask.size(); ++i)
+		for (int j = 0; j < mask[i].size(); ++j)
+			if (!mask[i][j] && (
+					(i > 0 && mask[i-1][j]) ||
+					(j > 0 && mask[i][j-1]) ||
+					(i+1 < mask.size() && mask[i+1][j]) ||
+					(j+1 < mask[i].size() && mask[i][j+1])
+				))
+				cur.push_back(std::make_pair(i, j));
+
+	for (;layers--; swap(cur, next)){
+		for (const std::pair<int, int>& p : cur){
+			if (mask[p.first][p.second])
+				continue;
+			mask[p.first][p.second] = true;
+			double sum = 0;
+			int count = 0;
+#define CHECK(i,j) do{\
+	if (mask[p.first+(i)][p.second+(j)]){\
+		sum += data[p.first+(i)][p.second+(j)];\
+		++count;\
+	}else\
+		next.push_back(std::make_pair(p.first+(i),p.second+(j)));\
+}while(0)
+			if (p.first)
+				CHECK(-1,0);
+			if (p.second)
+				CHECK(0,-1);
+			if (p.first+1 < mask.size())
+				CHECK(1,0);
+			if (p.second+1 < mask[p.first].size())
+				CHECK(0,+1);
+#undef CHECK
+			data[p.first][p.second] = sum/count;
+		}
+	}
+
+	for (int i = 0; i < mask.size(); ++i)
+		for (int j = 0; j < mask[i].size(); ++j)
+			if (!mask[i][j])
+				data[i][j] = boundary;
+	return std::move(mask);
+}
+
 int main(){
 	int N = 50, M = 50;
 	double mu = .1, g = -.05;
@@ -158,10 +199,10 @@ int main(){
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
-	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
-	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
-	for (int i = 4*0; i < 4*M; ++i)
-		for (int j = 4*0; j < 4*(N/2); ++j){
+	for (int i = 4*(M/4); i < 4*(M/2); ++i)
+		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
+	//for (int i = 4*0; i < 4*M; ++i)
+	//	for (int j = 4*0; j < 4*(N/2); ++j){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
 		}
@@ -175,7 +216,10 @@ int main(){
 		for (int i = 0; i < dy.size(); ++i)
 			for (int j = 0; j < dy[0].size(); ++j)
 				dy[i][j] += g * state[i][j];
-		project(dx, dy, state);
+
+		// velocity boundary conditions
+		dilation(dx, state);
+		project(dx, dy, dilation(dy, state));
 
 		// advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
