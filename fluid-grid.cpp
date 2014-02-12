@@ -162,7 +162,6 @@ std::vector<std::vector<bool> >&& dilation(grid data, std::vector<std::vector<bo
 		for (const std::pair<int, int>& p : cur){
 			if (mask[p.first][p.second])
 				continue;
-			mask[p.first][p.second] = true;
 			double sum = 0;
 			int count = 0;
 #define CHECK(i,j) do{\
@@ -183,6 +182,8 @@ std::vector<std::vector<bool> >&& dilation(grid data, std::vector<std::vector<bo
 #undef CHECK
 			data[p.first][p.second] = sum/count;
 		}
+		for (const std::pair<int, int>& p : cur)
+			mask[p.first][p.second] = true;
 	}
 
 	for (int i = 0; i < mask.size(); ++i)
