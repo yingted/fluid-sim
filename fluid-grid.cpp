@@ -175,11 +175,11 @@ int main(){
 		for (int i = 0; i < dy.size(); ++i)
 			for (int j = 0; j < dy[0].size(); ++j)
 				dy[i][j] += g * state[i][j];
+		project(dx, dy, state);
 
 		// advection
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
-		project(dx, dy, state);
 		rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 		//rpc("print_sum", std::string("state"), state);
 		advect(mx, my, dx, dy);
