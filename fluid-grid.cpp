@@ -1,6 +1,7 @@
 #include <vector>
 #include <utility>
 #include <fstream>
+#include <string>
 #include <cstdio>
 #include <cstdlib>
 #include <cassert>
@@ -157,12 +158,12 @@ int main(){
 	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
-	//for (int i = 2*(M/4); i < 2*(M/2); ++i)
-	//	for (int j = 2*(N/4); j < 2*(3*N/4); ++j){
-	for (int i = 2*0; i < 2*M; ++i)
-		for (int j = 2*0; j < 2*(N/2); ++j){
-			mx.push_back(i*.5+.25*rand()/RAND_MAX);
-			my.push_back(j*.5+.25*rand()/RAND_MAX);
+	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
+	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
+	for (int i = 4*0; i < 4*M; ++i)
+		for (int j = 4*0; j < 4*(N/2); ++j){
+			mx.push_back(i*.25+.125*rand()/RAND_MAX);
+			my.push_back(j*.25+.125*rand()/RAND_MAX);
 		}
 	update_state(state, mx, my);
 	//for (int j = 1; j < M/2; ++j)
@@ -179,6 +180,8 @@ int main(){
 		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
 		project(dx, dy, state);
+		rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
+		//rpc("print_sum", std::string("state"), state);
 		advect(mx, my, dx, dy);
 		update_state(state, mx, my);
 

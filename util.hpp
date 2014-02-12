@@ -12,10 +12,14 @@ extern "C"{
 #include <sparse_matrix.h>
 
 template<typename E>
+void _print_array_contents(std::ostream& os, const E& elt);
+
+template<typename E>
 std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
 	char next = '[';
 	for (const E& e : vec){
-		os << next << e;
+		_print_array_contents(os, next);
+		os << e;
 		next = ',';
 	}
 	if (next != ',') // eat trailing comma
@@ -25,7 +29,7 @@ std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
 
 template<typename E>
 std::ostream& operator<<(std::ostream& os, const SparseMatrix<E>& mat){
-	os << "{\"index\":" << mat.index << ",\"value\":" << mat.value << "}" << std::endl;
+	os << "{\"index\":" << mat.index << ",\"value\":" << mat.value << "}";
 }
 
 void _print_array_contents(std::ostream& os){
@@ -36,17 +40,31 @@ void _print_array_contents(std::ostream& os, const E& elt){
 	os << elt;
 }
 
+template<> // XXX allow char*
+void _print_array_contents<std::string>(std::ostream& os, const std::string& elt){
+	os << '"';
+	for (char ch : elt){
+		if (ch == '"' || ch == '\\')
+			os << '\\';
+		os << ch;
+	}
+	os << '"';
+}
+
 template<typename E, typename... Args>
 void _print_array_contents(std::ostream& os, const E& elt, const Args&... rest){
-	os << elt << ',';
+	_print_array_contents(os, elt);
+	os << ',';
 	_print_array_contents(os, rest...);
 }
 
 template<typename... Args>
 void rpc(const std::string& method, const Args&... params){ // call python
-	std::cout << "{\"method\":" << method << ",\"params\":[";
+	std::cout << "{\"method\":";
+	_print_array_contents(std::cout, method);
+	std::cout << ",\"params\":[";
 	_print_array_contents(std::cout, params...);
-	std::cout << "]}";
+	std::cout << "]}" << std::endl;
 }
 
 std::istream& operator>>(std::istream& is, char ch){

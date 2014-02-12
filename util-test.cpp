@@ -1,6 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <sstream>
+#include <string>
 #include <cassert>
 #include "util.hpp"
 
@@ -15,5 +16,7 @@ int main(){
 	assert(ss.str() == s);
 	ss >> a;
 	assert(a == orig);
+	//rpc("test", "string");
+	rpc("test", std::string("string"));
 	return 0;
 }
