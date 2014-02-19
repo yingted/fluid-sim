@@ -83,7 +83,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 
-	grid div = make_grid(dy.size(), dx[0].size()), p = div; // divergence = del dot v
+	grid div = make_grid<double>(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
 		for (int j = 0; j < div[i].size(); ++j)
 			div[i][j] = (dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j])/2;
@@ -146,7 +146,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 			dy[i][j] += p[i][j]-p[i][j-1];
 }
 
-std::vector<std::vector<bool> >&& dilation(grid data, std::vector<std::vector<bool> > mask, const double boundary=0, unsigned char layers=1){
+void dilate(grid data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=1){
 	std::vector<std::pair<int, int> >cur, next;
 	for (int i = 0; i < mask.size(); ++i)
 		for (int j = 0; j < mask[i].size(); ++j)
@@ -190,16 +190,15 @@ std::vector<std::vector<bool> >&& dilation(grid data, std::vector<std::vector<bo
 		for (int j = 0; j < mask[i].size(); ++j)
 			if (!mask[i][j])
 				data[i][j] = boundary;
-	return std::move(mask);
 }
 
 int main(){
 	int N = 50, M = 50;
 	double mu = .1, g = -.05;
 	// coordinates: math-style
-	grid dx = make_grid(N+1, M), dy = make_grid(N, M+1), fx = dx, fy = dy;
+	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
-	std::vector<std::vector<bool> > state = std::vector<std::vector<bool> >(N, std::vector<bool>(M));
+	std::vector<std::vector<bool> > state = make_grid<bool>(N, M);
 	for (int i = 4*(M/4); i < 4*(M/2); ++i)
 		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
 	//for (int i = 4*0; i < 4*M; ++i)
@@ -219,12 +218,23 @@ int main(){
 				dy[i][j] += g * state[i][j];
 
 		// velocity boundary conditions
-		dilation(dx, state);
-		project(dx, dy, dilation(dy, state));
+		std::vector<std::vector<bool> > mask_dx = make_grid(N+1, M, true), mask_dy = make_grid(N, M+1, true);
+		for (int i = 0; i < state.size(); ++i)
+			for (int j = 0; j < state[0].size(); ++j)
+				if (!state[i][j]){
+					mask_dx[i][j] = mask_dx[i+1][j] = false; // require 2 adjacent cells
+					mask_dy[i][j] = mask_dy[i][j+1] = false;
+					dx[i][j] = dx[i+1][j] = dy[i][j] = dy[i][j+1] = 0;
+				}
+		project(dx, dy, state);
+		dilate(dx, state);
+		dilate(dy, state);
+		//std::cerr << dx << std::endl;
 
 		// advection
-		dx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
+		grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
+		dx = std::move(ndx);
 		rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 		//rpc("print_sum", std::string("state"), state);
 		advect(mx, my, dx, dy);
