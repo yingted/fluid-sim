@@ -18,6 +18,11 @@ def max_abs(*args):
 		else:
 			print np.absolute(arg).max(),
 	print
+def deciles(name, mat):
+	print "deciles", name,
+	for decile in xrange(0, 101, 10):
+		print "% 5.04f"%np.percentile(mat, decile),
+	print
 def print_sum(name, mat):
 	print "sum", name, np.sum(mat)
 for line in sys.stdin:

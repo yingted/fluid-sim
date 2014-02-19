@@ -65,7 +65,7 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, const grid& dy){
 	for (int i = 0; i < mx.size(); ++i){
 		const double cur_dx = sample(dx, mx[i], my[i]),
-					 cur_dy = sample(dy, mx[i], my[i]);
+		             cur_dy = sample(dy, mx[i], my[i]);
 		mx[i] += .5*(cur_dx+sample(dx, mx[i]+cur_dx, my[i]+cur_dy));
 		my[i] += .5*(cur_dy+sample(dy, mx[i]+cur_dx, my[i]+cur_dy));
 	}
@@ -86,7 +86,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 	grid div = make_grid<double>(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
 		for (int j = 0; j < div[i].size(); ++j)
-			div[i][j] = (dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j])/2;
+			div[i][j] = dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j]; // TODO check boundary?
 
 	std::vector<std::vector<unsigned int> >row(p.size(), std::vector<unsigned int>(p[0].size(), -1)); // row for i, j
 	unsigned int count = 0;
@@ -122,7 +122,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 #undef CHECK
 			std::vector<double>values(indices.size(), -1);
 			values[0] = neighbours;
-			rhs[ij] = div[i][j]*neighbours;
+			rhs[ij] = div[i][j];
 			mat.add_sparse_row(ij, indices, values);
 		}
 
@@ -238,6 +238,8 @@ int main(){
 					if (!mask_dy[i][j])
 						dy[i][j] = 0;
 			project(dx, dy, state);
+			//rpc("deciles", std::string("dx"), dx);
+			//rpc("deciles", std::string("dy"), dy);
 			dilate(dx, mask_dx);
 			dilate(dy, mask_dy);
 		}
