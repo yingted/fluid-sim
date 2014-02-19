@@ -146,7 +146,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 			dy[i][j] += p[i][j]-p[i][j-1];
 }
 
-void dilate(grid data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=1){
+void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
 	std::vector<std::pair<int, int> >cur, next;
 	for (int i = 0; i < mask.size(); ++i)
 		for (int j = 0; j < mask[i].size(); ++j)
@@ -156,7 +156,7 @@ void dilate(grid data, std::vector<std::vector<bool> >& mask, const double bound
 					(i+1 < mask.size() && mask[i+1][j]) ||
 					(j+1 < mask[i].size() && mask[i][j+1])
 				))
-				cur.push_back(std::make_pair(i, j));
+				next.push_back(std::make_pair(i, j));
 
 	for (;layers--; swap(cur, next)){
 		for (const std::pair<int, int>& p : cur){
@@ -211,50 +211,66 @@ int main(){
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < 100; ++t){
 		// add forces
-		dx += fx;
-		dy += fy;
-		for (int i = 0; i < dy.size(); ++i)
-			for (int j = 0; j < dy[0].size(); ++j)
-				dy[i][j] += g * state[i][j];
+		{
+			dx += fx;
+			dy += fy;
+			for (int i = 0; i < state.size(); ++i)
+				for (int j = 0; j < state[0].size(); ++j){
+					dy[i][j] += .5 * g * state[i][j]; // flow in
+					dy[i][j+1] += .5 * g * state[i][j]; // and out
+				}
+		}
 
 		// velocity boundary conditions
-		std::vector<std::vector<bool> > mask_dx = make_grid(N+1, M, true), mask_dy = make_grid(N, M+1, true);
-		for (int i = 0; i < state.size(); ++i)
-			for (int j = 0; j < state[0].size(); ++j)
-				if (!state[i][j]){
-					mask_dx[i][j] = mask_dx[i+1][j] = false; // require 2 adjacent cells
-					mask_dy[i][j] = mask_dy[i][j+1] = false;
-					dx[i][j] = dx[i+1][j] = dy[i][j] = dy[i][j+1] = 0;
-				}
-		project(dx, dy, state);
-		dilate(dx, state);
-		dilate(dy, state);
-		//std::cerr << dx << std::endl;
+		{
+			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
+			for (int i = 0; i < state.size(); ++i)
+				for (int j = 0; j < state[0].size(); ++j)
+					if (state[i][j]){
+						mask_dx[i][j] = mask_dx[i+1][j] = true; // give 1 cell leeway
+						mask_dy[i][j] = mask_dy[i][j+1] = true; // for boundary condition
+					}
+			for (int i = 0; i < dx.size(); ++i)
+				for (int j = 0; j < dx.size(); ++j)
+					if (!mask_dx[i][j])
+						dx[i][j] = 0;
+			for (int i = 0; i < dy.size(); ++i)
+				for (int j = 0; j < dy.size(); ++j)
+					if (!mask_dy[i][j])
+						dy[i][j] = 0;
+			project(dx, dy, state);
+			dilate(dx, mask_dx);
+			dilate(dy, mask_dy);
+		}
 
 		// advection
-		grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
-		dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
-		dx = std::move(ndx);
-		rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
-		//rpc("print_sum", std::string("state"), state);
-		advect(mx, my, dx, dy);
-		update_state(state, mx, my);
+		{
+			grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
+			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
+			dx = std::move(ndx);
+			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
+			//rpc("print_sum", std::string("state"), state);
+			advect(mx, my, dx, dy);
+			update_state(state, mx, my);
+		}
 
 		// write output
-		char *name;
-		assert(asprintf(&name, "fluid-grid-%04d.ppm", t+1) >= 0);
-		std::ofstream f(name);
-		free(name);
-		double dpeak = 1;
-		//unsigned short peak = ~0;
-		unsigned short peak = 255;
-		f << "P3\n" << N << ' ' << M << "\n" << peak << "\n";
-		for (int j = M-1; j >=0; --j){
-			for (int i = 0; i < N; ++i)
-				for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), state[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
-				//for (const double& val : {p[i][j]*2-dpeak, p[i][j]*2-dpeak, p[i][j]*2-dpeak}) // grey
-					f << (unsigned short)(std::max(0., std::min((double)peak, round((val+1)/2/dpeak*peak)))) << ' ';
-			f << '\n';
+		{
+			char *name;
+			assert(asprintf(&name, "fluid-grid-%04d.ppm", t+1) >= 0);
+			std::ofstream f(name);
+			free(name);
+			double dpeak = 1;
+			//unsigned short peak = ~0;
+			unsigned short peak = 255;
+			f << "P3\n" << N << ' ' << M << "\n" << peak << "\n";
+			for (int j = M-1; j >=0; --j){
+				for (int i = 0; i < N; ++i)
+					for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), state[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
+					//for (const double& val : {p[i][j]*2-dpeak, p[i][j]*2-dpeak, p[i][j]*2-dpeak}) // grey
+						f << (unsigned short)(std::max(0., std::min((double)peak, round((val+1)/2/dpeak*peak)))) << ' ';
+				f << '\n';
+			}
 		}
 	}
 	return 0;
