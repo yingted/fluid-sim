@@ -63,13 +63,12 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 }
 
 void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, const grid& dy){
-	for (int i = 0; i < mx.size(); ++i)
-		for (int t = 0, iterations = 5*(int)ceil(hypot(sample(dx, mx[i], my[i]), sample(dy, mx[i], my[i]))); t < iterations; ++t){
-			const double cur_dx = sample(dx, mx[i], my[i]),
-						 cur_dy = sample(dy, mx[i], my[i]);
-			mx[i] += cur_dx/iterations;
-			my[i] += cur_dy/iterations;
-		}
+	for (int i = 0; i < mx.size(); ++i){
+		const double cur_dx = sample(dx, mx[i], my[i]),
+					 cur_dy = sample(dy, mx[i], my[i]);
+		mx[i] += .5*(cur_dx+sample(dx, mx[i]+cur_dx, my[i]+cur_dy));
+		my[i] += .5*(cur_dy+sample(dy, mx[i]+cur_dx, my[i]+cur_dy));
+	}
 }
 
 void update_state(std::vector<std::vector<bool> >& state, const std::vector<double> mx, const std::vector<double> my){
