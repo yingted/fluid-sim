@@ -214,11 +214,10 @@ int main(){
 		{
 			dx += fx;
 			dy += fy;
-			for (int i = 0; i < state.size(); ++i)
-				for (int j = 0; j < state[0].size(); ++j){
-					dy[i][j] += .5 * g * state[i][j]; // flow in
-					dy[i][j+1] += .5 * g * state[i][j]; // and out
-				}
+			for (int i = 0; i < dy.size(); ++i)
+				for (int j = 0; j < dy[0].size(); ++j)
+					if ((j > 0 && state[i][j-1]) || (j < state[0].size() && state[i][j]))
+						dy[i][j] += g; // flow in
 		}
 
 		// velocity boundary conditions
