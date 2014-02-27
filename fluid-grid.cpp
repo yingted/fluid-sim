@@ -71,15 +71,18 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 	}
 }
 
-void update_state(std::vector<std::vector<bool> >& state, const std::vector<double> mx, const std::vector<double> my){
-	for (std::vector<bool>& row : state)
-		for (auto cell : row)
-			cell = false;
+void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
+	for (auto& row : phi)
+		for (auto& cell : row)
+			cell = hypot(padding, padding);
+	const double radius=1.02*sqrt(.5);
 	for (int i = 0; i < mx.size(); ++i)
-		state[std::max(0, std::min((int)state.size()-1, (int)mx[i]))][std::max(0, std::min((int)state[0].size()-1, (int)my[i]))] = true;
+		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
+			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
+				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5),my[i]-(k+.5))-radius);
 }
 
-void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
+void project(grid& dx, grid& dy, const grid& phi){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 
@@ -92,21 +95,21 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 	unsigned int count = 0;
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j)
-			if (state[i][j])
+			if (phi[i][j] < 0)
 				row[i][j] = count++;
 	std::vector<double>rhs(count); // rhs for row
 	SparseMatrix<double>mat(count);
 
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j){
-			if (!state[i][j])
+			if (!(phi[i][j] < 0))
 				continue; // p = 0 by default
 			const unsigned int ij = row[i][j];
 			std::vector<unsigned int>indices;
 			indices.push_back(ij);
 			int neighbours = 0;
 #define CHECK(i,j) do{\
-	if (state[(i)][(j)]){\
+	if (phi[(i)][(j)] < 0){\
 		indices.push_back(row[(i)][(j)]);\
 	}\
 	++neighbours;\
@@ -135,7 +138,7 @@ void project(grid& dx, grid& dy, const std::vector<std::vector<bool> >& state){
 
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j)
-			if (state[i][j])
+			if (phi[i][j] < 0)
 				p[i][j] = result[row[i][j]]; // divisor = neighbours
 
 	for (int i = 1; i+1 < dx.size(); ++i)
@@ -198,7 +201,7 @@ int main(){
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
-	std::vector<std::vector<bool> > state = make_grid<bool>(N, M);
+	grid phi = make_grid<double>(N, M);
 	for (int i = 4*(M/4); i < 4*(M/2); ++i)
 		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
 	//for (int i = 4*0; i < 4*M; ++i)
@@ -206,7 +209,7 @@ int main(){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
 		}
-	update_state(state, mx, my);
+	update_phi(phi, mx, my);
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < 100; ++t){
@@ -216,16 +219,16 @@ int main(){
 			dy += fy;
 			for (int i = 0; i < dy.size(); ++i)
 				for (int j = 0; j < dy[0].size(); ++j)
-					if ((j > 0 && state[i][j-1]) || (j < state[0].size() && state[i][j]))
+					if ((j > 0 && phi[i][j-1] < 0) || (j < phi[0].size() && phi[i][j] < 0))
 						dy[i][j] += g; // flow in
 		}
 
 		// velocity boundary conditions
 		{
 			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
-			for (int i = 0; i < state.size(); ++i)
-				for (int j = 0; j < state[0].size(); ++j)
-					if (state[i][j]){
+			for (int i = 0; i < phi.size(); ++i)
+				for (int j = 0; j < phi[0].size(); ++j)
+					if (phi[i][j] < 0){
 						mask_dx[i][j] = mask_dx[i+1][j] = true; // give 1 cell leeway
 						mask_dy[i][j] = mask_dy[i][j+1] = true; // for boundary condition
 					}
@@ -237,7 +240,7 @@ int main(){
 				for (int j = 0; j < dy.size(); ++j)
 					if (!mask_dy[i][j])
 						dy[i][j] = 0;
-			project(dx, dy, state);
+			project(dx, dy, phi);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
 			dilate(dx, mask_dx);
@@ -250,9 +253,8 @@ int main(){
 			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
 			dx = std::move(ndx);
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
-			//rpc("print_sum", std::string("state"), state);
 			advect(mx, my, dx, dy);
-			update_state(state, mx, my);
+			update_phi(phi, mx, my);
 		}
 
 		// write output
@@ -267,7 +269,7 @@ int main(){
 			f << "P3\n" << N << ' ' << M << "\n" << peak << "\n";
 			for (int j = M-1; j >=0; --j){
 				for (int i = 0; i < N; ++i)
-					for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), state[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
+					for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), phi[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
 					//for (const double& val : {p[i][j]*2-dpeak, p[i][j]*2-dpeak, p[i][j]*2-dpeak}) // grey
 						f << (unsigned short)(std::max(0., std::min((double)peak, round((val+1)/2/dpeak*peak)))) << ' ';
 				f << '\n';
