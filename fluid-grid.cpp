@@ -115,13 +115,13 @@ void project(grid& dx, grid& dy, const grid& phi){
 	++neighbours;\
 }while(0)
 			if (i > 0)
-				CHECK(i-1,j);
+				CHECK(i-1, j);
 			if (i+1 < p.size())
-				CHECK(i+1,j);
+				CHECK(i+1, j);
 			if (j > 0)
-				CHECK(i,j-1);
+				CHECK(i, j-1);
 			if (j+1 < p[i].size())
-				CHECK(i,j+1);
+				CHECK(i, j+1);
 #undef CHECK
 			std::vector<double>values(indices.size(), -1);
 			values[0] = neighbours;
@@ -175,13 +175,13 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 		next.push_back(std::make_pair(p.first+(i),p.second+(j)));\
 }while(0)
 			if (p.first)
-				CHECK(-1,0);
+				CHECK(-1, 0);
 			if (p.second)
-				CHECK(0,-1);
+				CHECK(0, -1);
 			if (p.first+1 < mask.size())
-				CHECK(1,0);
+				CHECK(+1, 0);
 			if (p.second+1 < mask[p.first].size())
-				CHECK(0,+1);
+				CHECK(0, +1);
 #undef CHECK
 			data[p.first][p.second] = sum/count;
 		}
