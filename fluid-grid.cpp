@@ -100,6 +100,13 @@ void project(grid& dx, grid& dy, const grid& phi){
 	std::vector<double>rhs(count); // rhs for row
 	SparseMatrix<double>mat(count);
 
+#define THETA(i2,j2) (\
+	(phi[i][j]<0)==(phi[(i2)][(j2)]<0)?\
+		1:\
+		phi[i][j]<0?\
+			phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
+			phi[i][j]/(phi[i][j]-phi[(i2)][(j2)])\
+)
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j){
 			if (!(phi[i][j] < 0))
@@ -107,12 +114,13 @@ void project(grid& dx, grid& dy, const grid& phi){
 			const unsigned int ij = row[i][j];
 			std::vector<unsigned int>indices;
 			indices.push_back(ij);
-			int neighbours = 0;
-#define CHECK(i,j) do{\
-	if (phi[(i)][(j)] < 0){\
-		indices.push_back(row[(i)][(j)]);\
-	}\
-	++neighbours;\
+			double neighbours = 0;
+#define CHECK(i2,j2) do{\
+	if (phi[(i2)][(j2)] < 0){\
+		indices.push_back(row[(i2)][(j2)]);\
+		neighbours+=1;\
+	}else\
+		neighbours+=1/std::max(1e-2,THETA((i2),(j2)));\
 }while(0)
 			if (i > 0)
 				CHECK(i-1, j);
@@ -141,12 +149,15 @@ void project(grid& dx, grid& dy, const grid& phi){
 			if (phi[i][j] < 0)
 				p[i][j] = result[row[i][j]]; // divisor = neighbours
 
+#define DU(i2,j2) ((p[i][j]-p[(i2)][(j2)])/THETA((i2),(j2)))
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
-			dx[i][j] += p[i][j]-p[i-1][j];
+			dx[i][j] += DU(i-1, j);
 	for (int i = 0; i < dy.size(); ++i)
 		for (int j = 1; j+1 < dy[i].size(); ++j)
-			dy[i][j] += p[i][j]-p[i][j-1];
+			dy[i][j] += DU(i, j-1);
+#undef DU
+#undef THETA
 }
 
 void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
