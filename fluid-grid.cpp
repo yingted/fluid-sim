@@ -103,9 +103,11 @@ void project(grid& dx, grid& dy, const grid& phi){
 #define THETA(i2,j2) (\
 	(phi[i][j]<0)==(phi[(i2)][(j2)]<0)?\
 		1:\
-		phi[i][j]<0?\
-			phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
-			phi[i][j]/(phi[i][j]-phi[(i2)][(j2)])\
+		std::max(1e-2,\
+			phi[i][j]<0?\
+				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
+				phi[i][j]/(phi[i][j]-phi[(i2)][(j2)])\
+		)\
 )
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j){
@@ -120,7 +122,7 @@ void project(grid& dx, grid& dy, const grid& phi){
 		indices.push_back(row[(i2)][(j2)]);\
 		neighbours+=1;\
 	}else\
-		neighbours+=1/std::max(1e-2,THETA((i2),(j2)));\
+		neighbours+=1/THETA((i2),(j2));\
 }while(0)
 			if (i > 0)
 				CHECK(i-1, j);
