@@ -6,10 +6,10 @@ def check_symmetric(mat):
 	values = {}
 	for row, indices in enumerate(mat['index']):
 		for i, col in enumerate(indices):
-			mat[row, col] = mat['value'][row][i]		
+			values[row, col] = mat['value'][row][i]
 	for (row, col), val in values.iteritems():
-		if mat[col, row] != val:
-			print "not symmetric", row, col, val, mat[col, row]
+		if values.get((col, row)) != val:
+			print "not symmetric", row, col, val, values.get((col, row))
 def max_abs(*args):
 	print "max_abs",
 	for arg in args:

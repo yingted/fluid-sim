@@ -79,7 +79,7 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 	for (int i = 0; i < mx.size(); ++i)
 		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
 			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
-				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5),my[i]-(k+.5))-radius);
+				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5), my[i]-(k+.5))-radius);
 }
 
 void project(grid& dx, grid& dy, const grid& phi){
@@ -142,7 +142,7 @@ void project(grid& dx, grid& dy, const grid& phi){
 	std::vector<double>result(count);
 	double residual;
 	int iterations;
-	bool success = PCGSolver<double>().solve(mat, rhs, result, residual, iterations);
+	bool success = !count || PCGSolver<double>().solve(mat, rhs, result, residual, iterations);
 	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
 	rpc("check_symmetric", mat);
 
@@ -174,7 +174,7 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 				))
 				next.push_back(std::make_pair(i, j));
 
-	for (;layers--; swap(cur, next)){
+	for (; layers--; swap(cur, next)){
 		for (const std::pair<int, int>& p : cur){
 			if (mask[p.first][p.second])
 				continue;
@@ -215,10 +215,12 @@ int main(){
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	grid phi = make_grid<double>(N, M);
-	for (int i = 4*(M/4); i < 4*(M/2); ++i)
-		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
+	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
+	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
 	//for (int i = 4*0; i < 4*M; ++i)
 	//	for (int j = 4*0; j < 4*(N/2); ++j){
+	for (int i = 4*(M/2); i <= 4*(M/2); ++i)
+		for (int j = 4*(N/2); j <= 4*(N/2); ++j){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
 		}
