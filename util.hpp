@@ -60,11 +60,13 @@ void _print_array_contents(std::ostream& os, const E& elt, const Args&... rest){
 
 template<typename... Args>
 void rpc(const std::string& method, const Args&... params){ // call python
+#ifndef NDEBUG
 	std::cout << "{\"method\":";
 	_print_array_contents(std::cout, method);
 	std::cout << ",\"params\":[";
 	_print_array_contents(std::cout, params...);
 	std::cout << "]}" << std::endl;
+#endif
 }
 
 std::istream& operator>>(std::istream& is, char ch){

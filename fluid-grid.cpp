@@ -209,8 +209,13 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 }
 
 int main(){
-	int N = 50, M = 50;
-	double mu = .1, g = -.05;
+#ifdef NDEBUG
+	int N = 500, M = 500, T = 1000;
+	double g = -.005;
+#else
+	int N = 50, M = 50, T = 100;
+	double g = -.05;
+#endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
@@ -227,7 +232,7 @@ int main(){
 	update_phi(phi, mx, my);
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
-	for (int t = 0; t < 100; ++t){
+	for (int t = 0; t < T; ++t){
 		// add forces
 		{
 			dx += fx;
