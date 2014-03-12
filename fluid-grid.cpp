@@ -224,14 +224,18 @@ int main(){
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	grid phi = make_grid<double>(N, M);
-	for (int i = 4*(M/4); i < 4*(M/2); ++i)
-		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
-	//for (int i = 4*0; i < 4*M; ++i)
-	//	for (int j = 4*0; j < 4*(N/2); ++j){
+	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
+	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
+	for (int i = 4*0; i < 4*M; ++i)
+		for (int j = 4*0; j < 4*(N/2); ++j){
 	//for (int i = 4*(M/2); i <= 4*(M/2); ++i)
 	//	for (int j = 4*(N/2); j <= 4*(N/2); ++j){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
+			if (my.back() > .25*N+.25*mx.back()*N/M){
+				mx.pop_back();
+				my.pop_back();
+			}
 		}
 	update_phi(phi, mx, my);
 	//for (int j = 1; j < M/2; ++j)
