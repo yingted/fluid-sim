@@ -142,7 +142,11 @@ void project(grid& dx, grid& dy, const grid& phi){
 	std::vector<double>result(count);
 	double residual;
 	int iterations;
-	bool success = !count || PCGSolver<double>().solve(mat, rhs, result, residual, iterations);
+	PCGSolver<double>solver;
+#ifdef NDEBUG
+	solver.set_solver_parameters(1e-5, 1000, .97, .25);
+#endif
+	bool success = !count || solver.solve(mat, rhs, result, residual, iterations);
 	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
 	rpc("check_symmetric", mat);
 
@@ -220,12 +224,12 @@ int main(){
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	grid phi = make_grid<double>(N, M);
-	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
-	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
+	for (int i = 4*(M/4); i < 4*(M/2); ++i)
+		for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
 	//for (int i = 4*0; i < 4*M; ++i)
 	//	for (int j = 4*0; j < 4*(N/2); ++j){
-	for (int i = 4*(M/2); i <= 4*(M/2); ++i)
-		for (int j = 4*(N/2); j <= 4*(N/2); ++j){
+	//for (int i = 4*(M/2); i <= 4*(M/2); ++i)
+	//	for (int j = 4*(N/2); j <= 4*(N/2); ++j){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
 		}
