@@ -284,7 +284,10 @@ int main(){
 		// write output
 		{
 			char *name;
-			assert(asprintf(&name, "fluid-grid-%04d.ppm", t+1) >= 0);
+			{
+				int bytes = asprintf(&name, "fluid-grid-%04d.ppm", t+1);
+				assert(bytes >= 0);
+			}
 			std::ofstream f(name);
 			free(name);
 			double dpeak = 1;
