@@ -2,6 +2,13 @@
 import sys
 import json
 import numpy as np
+import thread
+import threading
+import traceback
+import OpenGL
+from OpenGL.GL import *
+from OpenGL.GLU import *
+from OpenGL.GLUT import *
 def check_symmetric(mat):
 	values = {}
 	for row, indices in enumerate(mat['index']):
@@ -25,14 +32,109 @@ def deciles(name, mat):
 	print
 def print_sum(name, mat):
 	print "sum", name, np.sum(mat)
-for line in sys.stdin:
-	try:
-		o = json.loads(line)
-	except ValueError:
-		continue
-	try:
-		method = o['method']
-		params = o['params']
-	except KeyError:
-		continue
-	globals()[method](*params)
+def opengl(w, h):
+	def decorate(redraw):
+		def idle():
+			if ret._prev_state != ret._state:
+				glutPostRedisplay()
+		def display():
+			frame, args = ret._prev_state = ret._state
+			ret._frame = frame
+			try:
+				redraw(*args)
+			except:
+				traceback.print_exc()
+				thread.interrupt_main()
+		def ret(*args):
+			ret._state = ret._state[0]+1, args
+			if ret.window is None:
+				def glut_thread():
+					glutInit()
+					glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH)
+					glutInitWindowSize(w, h)
+					ret.window = glutCreateWindow(redraw.__name__)
+					glutIdleFunc(idle)
+					glutDisplayFunc(display)
+					glutMainLoop()
+				thread = threading.Thread(target=glut_thread)
+				thread.daemon = True
+				thread.start()
+		ret._state = -1, None
+		ret.window = None
+		ret.__name__ = redraw.__name__
+		return ret
+	return decorate
+@opengl(500, 500)
+def update_phi(phi, mx, my, r=1.02):
+	h = len(phi)
+	w = len(phi[0])
+	phi = ((np.concatenate((
+		np.array(phi).transpose(),
+		[[0]*((-w)%4)]*h,
+	), axis=1)/r+1)*128).clip(0, 255).astype("uint8").tostring()
+	glPushMatrix()
+	if True:
+
+		glColorMask(1, 1, 1, 1)
+		glClearColor(0., 0., 0., 0.)
+		glClear(GL_COLOR_BUFFER_BIT)
+
+		glColor4f(1, 1, 1, 1)
+		glColorMask(1, 1, 1, 1)
+
+		#glShadeModel(GL_SMOOTH)
+		#glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+		#glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST) # instead of GL_LINEAR
+		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, w, h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, phi)
+		glEnable(GL_TEXTURE_2D)
+		glBegin(GL_QUADS)
+		if True:
+			glTexCoord2f(0., 0.)
+			glVertex2f(-1., -1.)
+			glTexCoord2f(1., 0.)
+			glVertex2f( 1., -1.)
+			glTexCoord2f(1., 1.)
+			glVertex2f( 1.,  1.)
+			glTexCoord2f(0., 1.)
+			glVertex2f(-1.,  1.)
+		glEnd()
+		glDisable(GL_TEXTURE_2D)
+
+		glTranslatef(-1., -1., 0.)
+		glScalef(2./w, 2./h, 1.)
+
+		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/5)
+		circle = (np.array([np.cos(theta), np.sin(theta)])*r).transpose()
+		glVertexPointerf(circle)
+		glEnableClientState(GL_VERTEX_ARRAY)
+
+		for r, color in ((500./w+1)/(500./w), (0, 0, 1, 1)), (1., (1, 0, 0, 1)):
+			glColorMask(*color)
+			glColor3f(*color)
+			for x, y in zip(mx, my):
+				glPushMatrix()
+				glTranslatef(x, y, 0)
+				glScalef(r, r, r)
+				glDrawArrays(GL_TRIANGLE_FAN, 0, len(circle))
+				glPopMatrix()
+
+		glDisableClientState(GL_VERTEX_ARRAY)
+
+		glutSwapBuffers()
+	glPopMatrix()
+def main():
+	for line in sys.stdin:
+		try:
+			o = json.loads(line)
+		except ValueError:
+			continue
+		try:
+			method = o['method']
+			params = o['params']
+		except KeyError:
+			continue
+		globals()[method](*params)
+if __name__ == "__main__":
+	main()

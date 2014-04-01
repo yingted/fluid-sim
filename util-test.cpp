@@ -7,7 +7,7 @@
 
 int main(){
 	const int N = 2, M = 2;
-	grid a = make_grid(N, M);
+	grid a = make_grid<double>(N, M);
 	a[0][0] = 3.14;
 	auto orig = a;
 	std::string s = "[[3.14,0],[0,0]]";

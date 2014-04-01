@@ -80,6 +80,7 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
 			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
 				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5), my[i]-(k+.5))-radius);
+	rpc("update_phi", phi, mx, my);
 }
 
 void project(grid& dx, grid& dy, const grid& phi){
