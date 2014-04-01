@@ -218,7 +218,7 @@ int main(){
 	int N = 500, M = 500, T = 1000;
 	double g = -.005;
 #else
-	int N = 50, M = 50, T = 100;
+	int N = 30, M = 30, T = 100;
 	double g = -.05;
 #endif
 	// coordinates: math-style
