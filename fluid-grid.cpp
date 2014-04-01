@@ -254,10 +254,10 @@ int main(){
 	//	for (int j = 4*(N/2); j <= 4*(N/2); ++j){
 			mx.push_back(i*.25+.125*rand()/RAND_MAX);
 			my.push_back(j*.25+.125*rand()/RAND_MAX);
-			if (my.back() > .25*N+.25*mx.back()*N/M){
-				mx.pop_back();
-				my.pop_back();
-			}
+			//if (my.back() > .25*N+.25*mx.back()*N/M){
+			//	mx.pop_back();
+			//	my.pop_back();
+			//}
 		}
 	update_phi(phi, mx, my);
 	//for (int j = 1; j < M/2; ++j)
