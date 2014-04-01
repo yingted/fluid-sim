@@ -82,11 +82,11 @@ def opengl(w, h, frameskip=False):
 		return ret
 	return decorate
 @opengl(500, 500, frameskip=False)
-def update_phi(phi, mx, my, r=1.02):
-	h = len(phi)
-	w = len(phi[0])
+def update_phi(phi, mx, my, bx, by, r=1.02):
+	phi = np.array(phi)
+	h, w = phi.shape
 	phi = ((np.concatenate((
-		np.array(phi).transpose(),
+		phi.transpose(),
 		[[0]*((-w)%4)]*h,
 	), axis=1)/r+1)*128).clip(0, 255).astype("uint8").tostring()
 	glPushMatrix()
@@ -96,7 +96,7 @@ def update_phi(phi, mx, my, r=1.02):
 		glClearColor(0., 0., 0., 0.)
 		glClear(GL_COLOR_BUFFER_BIT)
 
-		glColor4f(1, 1, 1, 1)
+		glColor3f(1, 1, 1)
 		glColorMask(1, 1, 1, 1)
 
 		#glShadeModel(GL_SMOOTH)
@@ -139,6 +139,14 @@ def update_phi(phi, mx, my, r=1.02):
 				glDrawArrays(GL_TRIANGLE_FAN, 0, len(circle))
 			glPopMatrix()
 
+		glDisableClientState(GL_VERTEX_ARRAY)
+
+		glColor3f(0, 0, 0)
+		glColorMask(1, 1, 1, 1)
+		boundary = np.array([bx, by]).transpose()
+		glVertexPointerf(boundary)
+		glEnableClientState(GL_VERTEX_ARRAY)
+		glDrawArrays(GL_POINTS, 0, len(boundary))
 		glDisableClientState(GL_VERTEX_ARRAY)
 
 		glutSwapBuffers()

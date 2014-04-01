@@ -71,6 +71,15 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 	}
 }
 
+#define THETA(i2,j2) (\
+	(phi[i][j]<0)==(phi[(i2)][(j2)]<0)?\
+		1:\
+		std::max(1e-2,\
+			phi[i][j]<0?\
+				phi[i][j]/(phi[i][j]-phi[(i2)][(j2)]):\
+				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j])\
+		)\
+)
 void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
 	for (auto& row : phi)
 		for (auto& cell : row)
@@ -80,7 +89,28 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
 			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
 				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5), my[i]-(k+.5))-radius);
-	rpc("update_phi", phi, mx, my);
+	std::vector<double> bx, by;
+	for (int i = 0; i < phi.size(); ++i)
+		for (int j = 0; j < phi[i].size(); ++j)
+			if (phi[i][j] < 0){
+#define CHECK(i2,j2) do{\
+	if(!(phi[(i2)][(j2)] < 0)){\
+		const double theta = THETA((i2),(j2));\
+		bx.push_back(i*(1-theta)+(i2)*theta+.5);\
+		by.push_back(j*(1-theta)+(j2)*theta+.5);\
+	}\
+}while(0)
+				if (i > 0)
+					CHECK(i-1, j);
+				if (i+1 < phi.size())
+					CHECK(i+1, j);
+				if (j > 0)
+					CHECK(i, j-1);
+				if (j+1 < phi[i].size())
+					CHECK(i, j+1);
+#undef CHECK
+			}
+	rpc("update_phi", phi, mx, my, bx, by);
 }
 
 void project(grid& dx, grid& dy, const grid& phi){
@@ -101,15 +131,6 @@ void project(grid& dx, grid& dy, const grid& phi){
 	std::vector<double>rhs(count); // rhs for row
 	SparseMatrix<double>mat(count);
 
-#define THETA(i2,j2) (\
-	(phi[i][j]<0)==(phi[(i2)][(j2)]<0)?\
-		1:\
-		std::max(1e-2,\
-			phi[i][j]<0?\
-				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
-				phi[i][j]/(phi[i][j]-phi[(i2)][(j2)])\
-		)\
-)
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j){
 			if (!(phi[i][j] < 0))
