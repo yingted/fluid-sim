@@ -16,11 +16,11 @@ smoke-grid-play: smoke-grid-0001.ppm
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 smoke-grid-%04d.ppm
 #fluid-grid-0001.ppm: fluid-grid
 #	set -o pipefail; ./fluid-grid | ./rpc.py
-fluid-grid.trace fluid-grid-0001.ppm: fluid-grid rpc.py
+fluid-grid.trace fluid-grid-0001.ppm: fluid-grid rpc.py apitrace
 	set -o pipefail; ./fluid-grid | apitrace/build/apitrace trace -o fluid-grid.trace ./rpc.py
 fluid-grid-play: fluid-grid-0001.ppm
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 fluid-grid-%04d.ppm
-fluid-grid-gl.mkv: fluid-grid.trace
+fluid-grid-gl.mkv: fluid-grid.trace apitrace
 	apitrace/build/glretrace -s - $< | ffmpeg -f image2pipe -vcodec ppm -i pipe: -c:v libx264 -qp 0 -y $@
 %.mkv: %-0001.ppm
 	ffmpeg $(FFMPEG_FLAGS) -i $(patsubst %.mkv,%-%04d.ppm,$@) -c:v libx264 -qp 0 -y $@
