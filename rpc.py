@@ -122,20 +122,22 @@ def update_phi(phi, mx, my, r=1.02):
 		glTranslatef(-1., -1., 0.)
 		glScalef(2./w, 2./h, 1.)
 
-		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/7)
+		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/10)
 		circle = (np.array([np.cos(theta), np.sin(theta)])*r).transpose()
 		glVertexPointerf(circle)
 		glEnableClientState(GL_VERTEX_ARRAY)
 
+		m = np.array([mx, my]).transpose()
+		m = np.concatenate((m[:1], np.diff(m, axis=0)))
 		for r, color in ((500./w+1)/(500./w), (0, 0, 1, 1)), (1., (1, 0, 0, 1)):
 			glColorMask(*color)
 			glColor3f(*color)
-			for x, y in zip(mx, my):
-				glPushMatrix()
+			glPushMatrix()
+			glScalef(r, r, r)
+			for x, y in m/r:
 				glTranslatef(x, y, 0)
-				glScalef(r, r, r)
 				glDrawArrays(GL_TRIANGLE_FAN, 0, len(circle))
-				glPopMatrix()
+			glPopMatrix()
 
 		glDisableClientState(GL_VERTEX_ARRAY)
 
