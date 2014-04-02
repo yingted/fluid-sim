@@ -122,7 +122,7 @@ def update_phi(phi, mx, my, bx, by, r):
 		glTranslatef(-1., -1., 0.)
 		glScalef(2./w, 2./h, 1.)
 
-		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/5)
+		theta = np.linspace(0, 2*np.pi, num=np.ceil(2*np.pi/np.arccos(1-1/(500./w*r))))
 		circle = (np.array([np.cos(theta), np.sin(theta)])*r).transpose()
 		glVertexPointerf(circle)
 		glEnableClientState(GL_VERTEX_ARRAY)
