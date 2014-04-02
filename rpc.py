@@ -82,7 +82,7 @@ def opengl(w, h, frameskip=False):
 		return ret
 	return decorate
 @opengl(500, 500, frameskip=False)
-def update_phi(phi, mx, my, bx, by, r=1.02):
+def update_phi(phi, mx, my, bx, by, r):
 	phi = np.array(phi)
 	h, w = phi.shape
 	phi = ((np.concatenate((
@@ -122,7 +122,7 @@ def update_phi(phi, mx, my, bx, by, r=1.02):
 		glTranslatef(-1., -1., 0.)
 		glScalef(2./w, 2./h, 1.)
 
-		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/10)
+		theta = np.linspace(0, 2*np.pi, num=500./w*r*2*np.pi/5)
 		circle = (np.array([np.cos(theta), np.sin(theta)])*r).transpose()
 		glVertexPointerf(circle)
 		glEnableClientState(GL_VERTEX_ARRAY)

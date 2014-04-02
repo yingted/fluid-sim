@@ -110,7 +110,7 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 					CHECK(i, j+1);
 #undef CHECK
 			}
-	rpc("update_phi", phi, mx, my, bx, by);
+	rpc("update_phi", phi, mx, my, bx, by, radius);
 }
 
 void project(grid& dx, grid& dy, const grid& phi){
