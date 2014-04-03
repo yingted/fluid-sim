@@ -116,6 +116,7 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 void project(grid& dx, grid& dy, const grid& phi){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
+	rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 
 	grid div = make_grid<double>(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
@@ -186,6 +187,12 @@ void project(grid& dx, grid& dy, const grid& phi){
 			dy[i][j] += DU(i, j-1);
 #undef DU
 #undef THETA
+
+	for (int i = 0; i < div.size(); ++i)
+		for (int j = 0; j < div[i].size(); ++j)
+			div[i][j] = dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j];
+	rpc("max_abs", std::string("div_final"), div);
+	std::cerr << "div_final = " << div << std::endl;
 }
 
 void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
@@ -234,12 +241,32 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 				data[i][j] = boundary;
 }
 
+template<typename T>
+void flip(std::vector<std::vector<T> > &a){ // rotate by pi
+	reverse(a.begin(), a.end());
+	for (std::vector<T>& row : a)
+		reverse(row.begin(), row.end());
+}
+
+template<typename T>
+void linear(T &a, T m, T b=0){ // transform by mx+b
+	a = m*a + b;
+}
+
+template<typename T, typename E>
+void linear(std::vector<E> &a, T m, T b=0){
+	for (E& row : a)
+		linear(row, m, b);
+}
+
 int main(){
+	srand(time(NULL));
 #ifdef NDEBUG
 	int N = 500, M = 500, T = 1000;
 	double g = -.005;
 #else
-	int N = 30, M = 30, T = 100;
+	//int N = 10, M = 10, T = 500;
+	int N = 10, M = 10, T = 1;
 	double g = -.05;
 #endif
 	// coordinates: math-style
@@ -252,8 +279,8 @@ int main(){
 		for (int j = 4*0; j < 4*(N/2); ++j){
 	//for (int i = 4*(M/2); i <= 4*(M/2); ++i)
 	//	for (int j = 4*(N/2); j <= 4*(N/2); ++j){
-			mx.push_back(i*.25+.125*rand()/RAND_MAX);
-			my.push_back(j*.25+.125*rand()/RAND_MAX);
+			mx.push_back(i*.25+.25*rand()/RAND_MAX);
+			my.push_back(j*.25+.25*rand()/RAND_MAX);
 			//if (my.back() > .25*N+.25*mx.back()*N/M){
 			//	mx.pop_back();
 			//	my.pop_back();
@@ -291,6 +318,7 @@ int main(){
 					if (!mask_dy[i][j])
 						dy[i][j] = 0;
 			project(dx, dy, phi);
+			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
 			dilate(dx, mask_dx);
@@ -302,7 +330,7 @@ int main(){
 			grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
 			dx = std::move(ndx);
-			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
+			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			advect(mx, my, dx, dy);
 			update_phi(phi, mx, my);
 		}
@@ -329,5 +357,15 @@ int main(){
 			}
 		}
 	}
+#if 0
+flip(dx);
+flip(dy);
+flip(phi);
+linear(g, -1.);
+linear(dx, -1.);
+linear(dy, -1.);
+linear(mx, -1., N+0.);
+linear(my, -1., M+0.);
+#endif
 	return 0;
 } // vim: set ts=4 sw=4 noet:
