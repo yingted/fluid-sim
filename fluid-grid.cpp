@@ -194,7 +194,6 @@ void project(grid& dx, grid& dy, const grid& phi){
 		for (int j = 1; j+1 < dy[i].size(); ++j)
 			dy[i][j] += DU(i, j-1);
 #undef DU
-#undef THETA
 	//std::cerr << "dx = " << dx << std::endl;
 	//std::cerr << "dy = " << dy << std::endl;
 }
@@ -300,9 +299,9 @@ int main(){
 			dx += fx;
 			dy += fy;
 			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 0; j < dy[0].size(); ++j)
-					if ((j > 0 && phi[i][j-1] < 0) || (j < phi[0].size() && phi[i][j] < 0))
-						dy[i][j] += g; // flow in
+				for (int j = 1; j+1 < dy[0].size(); ++j)
+					if (phi[i][j-1] < 0 || phi[i][j] < 0) // ignore theta = epsilon
+						dy[i][j] += g*THETA(i,j-1); // flow in
 		}
 
 		// velocity boundary conditions
