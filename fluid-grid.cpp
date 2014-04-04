@@ -82,7 +82,7 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 				0\
 	)\
 )
-const double radius=1.02*sqrt(.5);
+const double radius = 1.02*sqrt(.5);
 std::vector<double> bx, by;
 void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
 	for (auto& row : phi)
@@ -265,12 +265,12 @@ void linear(std::vector<E> &a, T m, T b=0){
 int main(){
 	//srand(time(NULL));
 #ifdef NDEBUG
-	int N = 500, M = 500, T = 1000;
-	double g = -.005;
+	const int N = 500, M = 500, T = 1000;
+	const double g = -.005;
 #else
-	int N = 10, M = 10, T = 100;
-	//int N = 10, M = 10, T = 1;
-	double g = -.05;
+	const int N = 10, M = 10, T = 1000;
+	//const int N = 10, M = 10, T = 1;
+	const double g = -.05, mu = .1;
 #endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
@@ -325,6 +325,12 @@ int main(){
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
+			dilate(dx, mask_dx);
+			dilate(dy, mask_dy);
+
+			dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
+			dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
+			project(dx, dy, phi);
 			dilate(dx, mask_dx);
 			dilate(dy, mask_dy);
 		}
