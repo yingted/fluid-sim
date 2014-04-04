@@ -1,4 +1,5 @@
 FFMPEG_FLAGS := -framerate 10
+FFMPEG_CONVERT := -c:v libx264 -qp 0 -y
 CFLAGS := -std=c++11 -Ipcgsolver
 util-test: util-test.cpp util.hpp
 	g++ $(CFLAGS) -o util-test{,.cpp}
@@ -21,9 +22,9 @@ fluid-grid.trace fluid-grid-0001.ppm: fluid-grid rpc.py apitrace
 fluid-grid-play: fluid-grid-0001.ppm
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 fluid-grid-%04d.ppm
 fluid-grid-gl.mkv: fluid-grid.trace apitrace
-	apitrace/build/glretrace -s - $< | ffmpeg -f image2pipe -vcodec ppm -i pipe: -c:v libx264 -qp 0 -y $@
+	apitrace/build/glretrace -s - $< | ffmpeg -f image2pipe -vcodec ppm -i pipe: $(FFMPEG_CONVERT) $@
 %.mkv: %-0001.ppm
-	ffmpeg $(FFMPEG_FLAGS) -i $(patsubst %.mkv,%-%04d.ppm,$@) -c:v libx264 -qp 0 -y $@
+	ffmpeg $(FFMPEG_FLAGS) -i $(patsubst %.mkv,%-%04d.ppm,$@) $(FFMPEG_CONVERT) $@
 apitrace:
 	git clone git://github.com/apitrace/apitrace.git
 	cd apitrace && cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Release && make -C build

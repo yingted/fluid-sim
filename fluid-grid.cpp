@@ -268,7 +268,7 @@ int main(){
 	int N = 500, M = 500, T = 1000;
 	double g = -.005;
 #else
-	int N = 10, M = 10, T = 1000;
+	int N = 10, M = 10, T = 100;
 	//int N = 10, M = 10, T = 1;
 	double g = -.05;
 #endif

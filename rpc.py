@@ -168,7 +168,7 @@ def draw(dx, dy, phi, mx, my, bx, by, r):
 			np.array([dx, np.zeros(dx.shape)]).reshape(2, dx.size),
 			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size),
 		), axis=1)
-		vectors = np.rollaxis(np.array((pos, pos+vel)), -1)
+		vectors = np.rollaxis(np.array((pos, pos+vel*(500./w))), -1)
 		glVertexPointerf(vectors)
 		glEnableClientState(GL_VERTEX_ARRAY)
 		glDrawArrays(GL_LINES, 0, 2*len(vectors))
