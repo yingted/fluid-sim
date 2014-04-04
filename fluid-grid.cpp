@@ -72,13 +72,15 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 }
 
 #define THETA(i2,j2) (\
-	(phi[i][j]<0)==(phi[(i2)][(j2)]<0)?\
-		1:\
-		std::max(1e-2,\
-			phi[i][j]<0?\
+	std::max(1e-2,\
+		(phi[i][j]<0)?\
+			(phi[(i2)][(j2)]<0)?\
+				1:\
 				phi[i][j]/(phi[i][j]-phi[(i2)][(j2)]):\
-				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j])\
-		)\
+			(phi[(i2)][(j2)]<0)?\
+				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
+				0\
+	)\
 )
 void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
 	for (auto& row : phi)
@@ -116,7 +118,6 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 void project(grid& dx, grid& dy, const grid& phi){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
-	rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 
 	grid div = make_grid<double>(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
@@ -160,6 +161,7 @@ void project(grid& dx, grid& dy, const grid& phi){
 			values[0] = neighbours;
 			rhs[ij] = div[i][j];
 			mat.add_sparse_row(ij, indices, values);
+			assert(values == values);
 		}
 
 	std::vector<double>result(count);
@@ -169,6 +171,8 @@ void project(grid& dx, grid& dy, const grid& phi){
 #ifdef NDEBUG
 	solver.set_solver_parameters(1e-5, 1000, .97, .25);
 #endif
+	rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy, std::string("div"), div, std::string("rhs"), rhs);
+	assert(rhs == rhs);
 	bool success = !count || solver.solve(mat, rhs, result, residual, iterations);
 	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
 	rpc("check_symmetric", mat);
@@ -177,7 +181,6 @@ void project(grid& dx, grid& dy, const grid& phi){
 		for (int j = 0; j < p[i].size(); ++j)
 			if (phi[i][j] < 0)
 				p[i][j] = result[row[i][j]]; // divisor = neighbours
-
 #define DU(i2,j2) ((p[i][j]-p[(i2)][(j2)])/THETA((i2),(j2)))
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
@@ -187,12 +190,6 @@ void project(grid& dx, grid& dy, const grid& phi){
 			dy[i][j] += DU(i, j-1);
 #undef DU
 #undef THETA
-
-	for (int i = 0; i < div.size(); ++i)
-		for (int j = 0; j < div[i].size(); ++j)
-			div[i][j] = dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j];
-	rpc("max_abs", std::string("div_final"), div);
-	std::cerr << "div_final = " << div << std::endl;
 }
 
 void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
@@ -260,13 +257,13 @@ void linear(std::vector<E> &a, T m, T b=0){
 }
 
 int main(){
-	srand(time(NULL));
+	//srand(time(NULL));
 #ifdef NDEBUG
 	int N = 500, M = 500, T = 1000;
 	double g = -.005;
 #else
-	//int N = 10, M = 10, T = 500;
-	int N = 10, M = 10, T = 1;
+	int N = 10, M = 10, T = 100;
+	//int N = 10, M = 10, T = 1;
 	double g = -.05;
 #endif
 	// coordinates: math-style
