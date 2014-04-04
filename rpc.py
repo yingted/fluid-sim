@@ -7,17 +7,24 @@ import threading
 import traceback
 import collections
 import OpenGL
+import fcntl
+import termios
+import struct
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
-def check_symmetric(mat):
-	values = {}
-	for row, indices in enumerate(mat['index']):
+def mat_to_array(mat):
+	index = mat['index']
+	value = mat['value']
+	ret = np.zeros((len(index), max(map(max, index))+1))
+	for row, indices in enumerate(index):
 		for i, col in enumerate(indices):
-			values[row, col] = mat['value'][row][i]
-	for (row, col), val in values.iteritems():
-		if values.get((col, row)) != val:
-			print "not symmetric", row, col, val, values.get((col, row))
+			ret[row, col] = value[row][i]
+	return ret
+def check_symmetric(mat):
+	for row, col in zip(*np.nonzero(mat != mat.transpose())):
+		if row < col:
+			print "not symmetric", row, col, mat[row, col], mat[col, row]
 def max_abs(*args):
 	print "max_abs",
 	for arg in args:
@@ -56,6 +63,7 @@ def opengl(w, h, frameskip=False):
 			except:
 				traceback.print_exc()
 				thread.interrupt_main()
+				thread.exit()
 		def ret(*args):
 			lock.acquire()
 			dirty[0] = True
@@ -82,7 +90,7 @@ def opengl(w, h, frameskip=False):
 		return ret
 	return decorate
 @opengl(500, 500, frameskip=False)
-def update_phi(phi, mx, my, bx, by, r):
+def draw(dx, dy, phi, mx, my, bx, by, r):
 	phi = np.array(phi)
 	h, w = phi.shape
 	phi = ((np.concatenate((
@@ -149,9 +157,42 @@ def update_phi(phi, mx, my, bx, by, r):
 		glDrawArrays(GL_POINTS, 0, len(boundary))
 		glDisableClientState(GL_VERTEX_ARRAY)
 
+		glColor3f(0, 1, 0)
+		dx = np.array(dx)
+		dy = np.array(dy)
+		pos = np.concatenate((
+			np.mgrid[map(slice, dx.shape)].reshape(2, dx.size)+np.transpose([[0, .5]]*dx.size),
+			np.mgrid[map(slice, dy.shape)].reshape(2, dy.size)+np.transpose([[.5, 0]]*dy.size),
+		), axis=1)
+		vel = np.concatenate((
+			np.array([dx, np.zeros(dx.shape)]).reshape(2, dx.size),
+			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size),
+		), axis=1)
+		vectors = np.rollaxis(np.array((pos, pos+vel)), -1)
+		glVertexPointerf(vectors)
+		glEnableClientState(GL_VERTEX_ARRAY)
+		glDrawArrays(GL_LINES, 0, 2*len(vectors))
+		glDisableClientState(GL_VERTEX_ARRAY)
+
 		glutSwapBuffers()
 	glPopMatrix()
+def convert_param(param):
+	if isinstance(param, dict):
+		if isinstance(param.get('index'), list) and isinstance(param.get('value'), list):
+			return mat_to_array(param)
+	return param
+def echo(*args):
+	for arg in args:
+		print arg,
+	print
+def terminal_size():
+	try:
+		h, w, hp, wp = struct.unpack('HHHH', fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, struct.pack('HHHH', 0, 0, 0, 0)))
+	except IOError:
+		h = w = None
+	return h, w
 def main():
+	np.set_printoptions(precision=3, suppress=True, linewidth=terminal_size()[1])
 	for line in sys.stdin:
 		try:
 			o = json.loads(line)
@@ -162,6 +203,6 @@ def main():
 			params = o['params']
 		except KeyError:
 			continue
-		globals()[method](*params)
+		globals()[method](*map(convert_param, params))
 if __name__ == "__main__":
 	main()

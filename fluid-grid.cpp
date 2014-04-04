@@ -36,7 +36,7 @@ double sample(const grid& a, double x, double y){
 	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
 }
 
-grid&& diffusion(const grid& a0, double mu, double boundary, int type){
+grid diffusion(const grid& a0, double mu, double boundary, int type){
 	assert (!a0.empty() && !a0[0].empty());
 	grid a = a0;
 	for (int t = 0; t < 20; ++t){
@@ -50,7 +50,7 @@ grid&& diffusion(const grid& a0, double mu, double boundary, int type){
 					))/(1+4*mu);
 		set_boundary(a, boundary, type);
 	}
-	return std::move(a);
+	return a;
 }
 
 grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double oy, int type){
@@ -82,16 +82,18 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 				0\
 	)\
 )
+const double radius=1.02*sqrt(.5);
+std::vector<double> bx, by;
 void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
 	for (auto& row : phi)
 		for (auto& cell : row)
 			cell = hypot(padding, padding);
-	const double radius=1.02*sqrt(.5);
 	for (int i = 0; i < mx.size(); ++i)
 		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
 			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
 				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5), my[i]-(k+.5))-radius);
-	std::vector<double> bx, by;
+	bx.clear();
+	by.clear();
 	for (int i = 0; i < phi.size(); ++i)
 		for (int j = 0; j < phi[i].size(); ++j)
 			if (phi[i][j] < 0){
@@ -112,7 +114,6 @@ void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<doub
 					CHECK(i, j+1);
 #undef CHECK
 			}
-	rpc("update_phi", phi, mx, my, bx, by, radius);
 }
 
 void project(grid& dx, grid& dy, const grid& phi){
@@ -161,6 +162,7 @@ void project(grid& dx, grid& dy, const grid& phi){
 			values[0] = neighbours;
 			rhs[ij] = div[i][j];
 			mat.add_sparse_row(ij, indices, values);
+			//std::cerr << "mat[" << i << "][" << j << "]: values = " << values << ", rhs = " << rhs[ij] << std::endl;
 			assert(values == values);
 		}
 
@@ -172,6 +174,7 @@ void project(grid& dx, grid& dy, const grid& phi){
 	solver.set_solver_parameters(1e-5, 1000, .97, .25);
 #endif
 	rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy, std::string("div"), div, std::string("rhs"), rhs);
+	//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
 	assert(rhs == rhs);
 	bool success = !count || solver.solve(mat, rhs, result, residual, iterations);
 	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
@@ -179,8 +182,10 @@ void project(grid& dx, grid& dy, const grid& phi){
 
 	for (int i = 0; i < p.size(); ++i)
 		for (int j = 0; j < p[i].size(); ++j)
-			if (phi[i][j] < 0)
+			if (phi[i][j] < 0){
 				p[i][j] = result[row[i][j]]; // divisor = neighbours
+				//std::cerr << "p[" << i << "][" << j << "] = " << p[i][j] << std::endl;
+			}
 #define DU(i2,j2) ((p[i][j]-p[(i2)][(j2)])/THETA((i2),(j2)))
 	for (int i = 1; i+1 < dx.size(); ++i)
 		for (int j = 0; j < dx[i].size(); ++j)
@@ -190,6 +195,8 @@ void project(grid& dx, grid& dy, const grid& phi){
 			dy[i][j] += DU(i, j-1);
 #undef DU
 #undef THETA
+	//std::cerr << "dx = " << dx << std::endl;
+	//std::cerr << "dy = " << dy << std::endl;
 }
 
 void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
@@ -262,7 +269,7 @@ int main(){
 	int N = 500, M = 500, T = 1000;
 	double g = -.005;
 #else
-	int N = 10, M = 10, T = 100;
+	int N = 10, M = 10, T = 1000;
 	//int N = 10, M = 10, T = 1;
 	double g = -.05;
 #endif
@@ -284,6 +291,7 @@ int main(){
 			//}
 		}
 	update_phi(phi, mx, my);
+	rpc("draw", dx, dy, phi, mx, my, bx, by, radius);
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
@@ -330,6 +338,7 @@ int main(){
 			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			advect(mx, my, dx, dy);
 			update_phi(phi, mx, my);
+			rpc("draw", dx, dy, phi, mx, my, bx, by, radius);
 		}
 
 		// write output
