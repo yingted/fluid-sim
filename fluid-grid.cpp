@@ -12,6 +12,7 @@
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
 
+#define BOUNDARY_NONE (0)
 #define BOUNDARY_VERTICAL (1)
 #define BOUNDARY_HORIZONTAL (2)
 #define BOUNDARY_BORDER (BOUNDARY_VERTICAL|BOUNDARY_HORIZONTAL)
@@ -82,16 +83,7 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 				0\
 	)\
 )
-const double radius = 1.02*sqrt(.5);
-std::vector<double> bx, by;
-void update_phi(grid& phi, const std::vector<double>& mx, const std::vector<double>& my, const int padding=2){
-	for (auto& row : phi)
-		for (auto& cell : row)
-			cell = hypot(padding, padding);
-	for (int i = 0; i < mx.size(); ++i)
-		for (int j = std::max(0, ((int)mx[i])-padding); j <= std::min((int)phi.size()-1, ((int)mx[i])+padding); ++j)
-			for (int k = std::max(0, ((int)my[i])-padding); k <= std::min((int)phi[0].size()-1, ((int)my[i])+padding); ++k)
-				phi[j][k] = std::min(phi[j][k], hypot(mx[i]-(j+.5), my[i]-(k+.5))-radius);
+void interpolate_surface(grid& phi, std::vector<double>& bx, std::vector<double>& by){
 	bx.clear();
 	by.clear();
 	for (int i = 0; i < phi.size(); ++i)
@@ -252,12 +244,12 @@ void flip(std::vector<std::vector<T> > &a){ // rotate by pi
 }
 
 template<typename T>
-void linear(T &a, T m, T b=0){ // transform by mx+b
+void linear(T& a, T m, T b=0){ // transform by mx+b
 	a = m*a + b;
 }
 
 template<typename T, typename E>
-void linear(std::vector<E> &a, T m, T b=0){
+void linear(std::vector<E>& a, T m, T b=0){
 	for (E& row : a)
 		linear(row, m, b);
 }
@@ -268,29 +260,20 @@ int main(){
 	const int N = 500, M = 500, T = 1000;
 	const double g = -.005;
 #else
-	const int N = 10, M = 10, T = 1000;
+	const int N = 50, M = 50, T = 100;
 	//const int N = 10, M = 10, T = 1;
 	const double g = -.05, mu = .1;
 #endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
-	std::vector<double> mx = std::vector<double>(), my = std::vector<double>();
 	grid phi = make_grid<double>(N, M);
-	//for (int i = 4*(M/4); i < 4*(M/2); ++i)
-	//	for (int j = 4*(N/4); j < 4*(3*N/4); ++j){
-	for (int i = 4*0; i < 4*M; ++i)
-		for (int j = 4*0; j < 4*(N/2); ++j){
-	//for (int i = 4*(M/2); i <= 4*(M/2); ++i)
-	//	for (int j = 4*(N/2); j <= 4*(N/2); ++j){
-			mx.push_back(i*.25+.25*rand()/RAND_MAX);
-			my.push_back(j*.25+.25*rand()/RAND_MAX);
-			//if (my.back() > .25*N+.25*mx.back()*N/M){
-			//	mx.pop_back();
-			//	my.pop_back();
-			//}
-		}
-	update_phi(phi, mx, my);
-	rpc("draw", dx, dy, phi, mx, my, bx, by, radius);
+	std::vector<double>bx, by;
+	for (int i = 0; i < M; ++i)
+		for (int j = 0; j < N; ++j)
+			//phi[i][j] = j-N/2;
+			phi[i][j] = j-N/2+.25*i;
+	interpolate_surface(phi, bx, by);
+	rpc("draw", dx, dy, phi, bx, by);
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
@@ -301,7 +284,7 @@ int main(){
 			for (int i = 0; i < dy.size(); ++i)
 				for (int j = 1; j+1 < dy[0].size(); ++j)
 					if (phi[i][j-1] < 0 || phi[i][j] < 0) // ignore theta = epsilon
-						dy[i][j] += g*THETA(i,j-1); // flow in
+						dy[i][j] += g*THETA(i, j-1); // flow in
 		}
 
 		// velocity boundary conditions
@@ -327,12 +310,13 @@ int main(){
 			//rpc("deciles", std::string("dy"), dy);
 			dilate(dx, mask_dx);
 			dilate(dy, mask_dy);
-
+#if 0
 			dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
 			dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
 			project(dx, dy, phi);
 			dilate(dx, mask_dx);
 			dilate(dy, mask_dy);
+#endif
 		}
 
 		// advection
@@ -341,9 +325,9 @@ int main(){
 			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
 			dx = std::move(ndx);
 			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
-			advect(mx, my, dx, dy);
-			update_phi(phi, mx, my);
-			rpc("draw", dx, dy, phi, mx, my, bx, by, radius);
+			phi = advection(phi, dx, dy, .5, .5, BOUNDARY_NONE);
+			interpolate_surface(phi, bx, by);
+			rpc("draw", dx, dy, phi, bx, by);
 		}
 
 		// write output
@@ -375,8 +359,6 @@ flip(phi);
 linear(g, -1.);
 linear(dx, -1.);
 linear(dy, -1.);
-linear(mx, -1., N+0.);
-linear(my, -1., M+0.);
 #endif
 	return 0;
 } // vim: set ts=4 sw=4 noet:
