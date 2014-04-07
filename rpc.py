@@ -89,14 +89,15 @@ def opengl(w, h, frameskip=False):
 		ret.__name__ = redraw.__name__
 		return ret
 	return decorate
-@opengl(500, 500, frameskip=False)
-def draw(dx, dy, phi, mx, my, bx, by, r):
+winsize = 500
+@opengl(winsize, winsize, frameskip=False)
+def draw(dx, dy, phi, bx, by):
 	phi = np.array(phi)
 	h, w = phi.shape
 	phi = ((np.concatenate((
 		phi.transpose(),
 		[[0]*((-w)%4)]*h,
-	), axis=1)/r+1)*128).clip(0, 255).astype("uint8").tostring()
+	), axis=1)+1)*128).clip(0, 255).astype("uint8").tostring()
 	glPushMatrix()
 	if True:
 
@@ -130,33 +131,6 @@ def draw(dx, dy, phi, mx, my, bx, by, r):
 		glTranslatef(-1., -1., 0.)
 		glScalef(2./w, 2./h, 1.)
 
-		theta = np.linspace(0, 2*np.pi, num=np.ceil(2*np.pi/np.arccos(1-1/(500./w*r))))
-		circle = (np.array([np.cos(theta), np.sin(theta)])*r).transpose()
-		glVertexPointerf(circle)
-		glEnableClientState(GL_VERTEX_ARRAY)
-
-		m = np.array([mx, my]).transpose()
-		m = np.concatenate((m[:1], np.diff(m, axis=0)))
-		for r, color in ((500./w+1)/(500./w), (0, 0, 1, 1)), (1., (1, 0, 0, 1)):
-			glColorMask(*color)
-			glColor3f(*color)
-			glPushMatrix()
-			glScalef(r, r, r)
-			for x, y in m/r:
-				glTranslatef(x, y, 0)
-				glDrawArrays(GL_TRIANGLE_FAN, 0, len(circle))
-			glPopMatrix()
-
-		glDisableClientState(GL_VERTEX_ARRAY)
-
-		glColor3f(0, 0, 0)
-		glColorMask(1, 1, 1, 1)
-		boundary = np.array([bx, by]).transpose()
-		glVertexPointerf(boundary)
-		glEnableClientState(GL_VERTEX_ARRAY)
-		glDrawArrays(GL_POINTS, 0, len(boundary))
-		glDisableClientState(GL_VERTEX_ARRAY)
-
 		glColor3f(0, 1, 0)
 		dx = np.array(dx)
 		dy = np.array(dy)
@@ -168,10 +142,18 @@ def draw(dx, dy, phi, mx, my, bx, by, r):
 			np.array([dx, np.zeros(dx.shape)]).reshape(2, dx.size),
 			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size),
 		), axis=1)
-		vectors = np.rollaxis(np.array((pos, pos+vel*(500./w))), -1)
+		vectors = np.rollaxis(np.array((pos, pos+vel*(float(winsize)/w))), -1)
 		glVertexPointerf(vectors)
 		glEnableClientState(GL_VERTEX_ARRAY)
 		glDrawArrays(GL_LINES, 0, 2*len(vectors))
+		glDisableClientState(GL_VERTEX_ARRAY)
+
+		glColor3f(1, 0, 0)
+		glColorMask(1, 1, 1, 1)
+		boundary = np.array([bx, by]).transpose()
+		glVertexPointerf(boundary)
+		glEnableClientState(GL_VERTEX_ARRAY)
+		glDrawArrays(GL_POINTS, 0, len(boundary))
 		glDisableClientState(GL_VERTEX_ARRAY)
 
 		glutSwapBuffers()
