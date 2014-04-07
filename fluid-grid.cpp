@@ -198,15 +198,16 @@ void project(grid& dx, grid& dy, const grid& phi){
 	//std::cerr << "dy = " << dy << std::endl;
 }
 
-void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
+void dilate(grid& data, std::vector<std::vector<bool> >& mask, int type, const double boundary=0, unsigned char layers=3){
 	std::vector<std::pair<int, int> >cur, next;
+	const bool vert = !!(type & BOUNDARY_VERTICAL), horiz = !!(type & BOUNDARY_HORIZONTAL);
 	for (int i = 0; i < mask.size(); ++i)
 		for (int j = 0; j < mask[i].size(); ++j)
 			if (!mask[i][j] && (
-					(i > 0 && mask[i-1][j]) ||
-					(j > 0 && mask[i][j-1]) ||
-					(i+1 < mask.size() && mask[i+1][j]) ||
-					(j+1 < mask[i].size() && mask[i][j+1])
+					(horiz && i > 0 && mask[i-1][j]) ||
+					(vert && j > 0 && mask[i][j-1]) ||
+					(horiz && i+1 < mask.size() && mask[i+1][j]) ||
+					(vert && j+1 < mask[i].size() && mask[i][j+1])
 				))
 				next.push_back(std::make_pair(i, j));
 
@@ -223,13 +224,13 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 	}else\
 		next.push_back(std::make_pair(p.first+(i),p.second+(j)));\
 }while(0)
-			if (p.first)
+			if (horiz && p.first)
 				CHECK(-1, 0);
-			if (p.second)
+			if (vert && p.second)
 				CHECK(0, -1);
-			if (p.first+1 < mask.size())
+			if (horiz && p.first+1 < mask.size())
 				CHECK(+1, 0);
-			if (p.second+1 < mask[p.first].size())
+			if (vert && p.second+1 < mask[p.first].size())
 				CHECK(0, +1);
 #undef CHECK
 			data[p.first][p.second] = sum/count;
@@ -325,14 +326,14 @@ int main(){
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
-			dilate(dx, mask_dx);
-			dilate(dy, mask_dy);
+			dilate(dx, mask_dx, BOUNDARY_VERTICAL);
+			dilate(dy, mask_dy, BOUNDARY_HORIZONTAL);
 
 			dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
 			dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
 			project(dx, dy, phi);
-			dilate(dx, mask_dx);
-			dilate(dy, mask_dy);
+			dilate(dx, mask_dx, BOUNDARY_VERTICAL);
+			dilate(dy, mask_dy, BOUNDARY_HORIZONTAL);
 		}
 
 		// advection
