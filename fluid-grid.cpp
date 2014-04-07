@@ -56,8 +56,8 @@ grid diffusion(const grid& a0, double mu, double boundary, int type){
 
 grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double oy, int type){
 	grid a = a0;
-	for (int i = 1; i+1 < a0.size(); ++i)
-		for (int j = 1; j+1 < a0[i].size(); ++j)
+	for (int i = 0; i < a0.size(); ++i)
+		for (int j = 0; j < a0[i].size(); ++j)
 			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
 	set_boundary(a, 0, type);
 	return std::move(a);
@@ -261,7 +261,7 @@ int main(){
 	const int N = 500, M = 500, T = 1000;
 	const double g = -.005;
 #else
-	const int N = 50, M = 50, T = 100;
+	const int N = 50, M = 50, T = 200;
 	//const int N = 10, M = 10, T = 1;
 	const double g = -.05, mu = .1;
 #endif
