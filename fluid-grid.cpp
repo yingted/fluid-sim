@@ -72,17 +72,17 @@ void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, co
 	}
 }
 
-#define THETA(i2,j2) (\
-	std::max(1e-2,\
-		(phi[i][j]<0)?\
-			(phi[(i2)][(j2)]<0)?\
-				1:\
-				phi[i][j]/(phi[i][j]-phi[(i2)][(j2)]):\
-			(phi[(i2)][(j2)]<0)?\
-				phi[(i2)][(j2)]/(phi[(i2)][(j2)]-phi[i][j]):\
-				0\
-	)\
-)
+double phi_theta(double a, double b){
+	return a < 0 ?
+		b < 0 ?
+			1 :
+			a/(a-b) :
+		b < 0 ?
+			b/(b-a) :
+			0;
+}
+
+#define THETA(i2,j2) (std::max(1e-2, phi_theta(phi[i][j], phi[(i2)][(j2)])))
 void interpolate_surface(grid& phi, std::vector<double>& bx, std::vector<double>& by){
 	bx.clear();
 	by.clear();
@@ -108,14 +108,16 @@ void interpolate_surface(grid& phi, std::vector<double>& bx, std::vector<double>
 			}
 }
 
-void project(grid& dx, grid& dy, const grid& phi){
+void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
 	set_boundary(dx, 0, BOUNDARY_VERTICAL);
 	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 
+#define THETA_X(i2,j2) (1-phi_theta(solid_phi[(i2)][(j2)], solid_phi[(i2)][(j2)+1]))
+#define THETA_Y(i2,j2) (1-phi_theta(solid_phi[(i2)][(j2)], solid_phi[(i2)+1][(j2)]))
 	grid div = make_grid<double>(dy.size(), dx[0].size()), p = div; // divergence = del dot v
 	for (int i = 0; i < div.size(); ++i)
 		for (int j = 0; j < div[i].size(); ++j)
-			div[i][j] = dx[i+1][j]-dx[i][j]+dy[i][j+1]-dy[i][j]; // TODO check boundary?
+			div[i][j] = THETA_X(i+1, j)*dx[i+1][j]-THETA_X(i, j)*dx[i][j]+THETA_Y(i, j+1)*dy[i][j+1]-THETA_Y(i, j)*dy[i][j]; // TODO check boundary?
 
 	std::vector<std::vector<unsigned int> >row(p.size(), std::vector<unsigned int>(p[0].size(), -1)); // row for i, j
 	unsigned int count = 0;
@@ -132,26 +134,28 @@ void project(grid& dx, grid& dy, const grid& phi){
 				continue; // p = 0 by default
 			const unsigned int ij = row[i][j];
 			std::vector<unsigned int>indices;
-			indices.push_back(ij);
+			std::vector<double>values;
 			double neighbours = 0;
-#define CHECK(i2,j2) do{\
+#define CHECK(i2,j2,w) do{\
+	double coef = (w);\
 	if (phi[(i2)][(j2)] < 0){\
+		values.push_back(-coef);\
 		indices.push_back(row[(i2)][(j2)]);\
-		neighbours+=1;\
 	}else\
-		neighbours+=1/THETA((i2),(j2));\
+		coef /= THETA((i2),(j2));\
+	neighbours += coef;\
 }while(0)
 			if (i > 0)
-				CHECK(i-1, j);
+				CHECK(i-1, j, THETA_X(i, j));
 			if (i+1 < p.size())
-				CHECK(i+1, j);
+				CHECK(i+1, j, THETA_X(i+1, j));
 			if (j > 0)
-				CHECK(i, j-1);
+				CHECK(i, j-1, THETA_Y(i, j));
 			if (j+1 < p[i].size())
-				CHECK(i, j+1);
+				CHECK(i, j+1, THETA_Y(i, j+1));
 #undef CHECK
-			std::vector<double>values(indices.size(), -1);
-			values[0] = neighbours;
+			values.push_back(neighbours);
+			indices.push_back(ij);
 			rhs[ij] = div[i][j];
 			mat.add_sparse_row(ij, indices, values);
 			//std::cerr << "mat[" << i << "][" << j << "]: values = " << values << ", rhs = " << rhs[ij] << std::endl;
@@ -270,8 +274,9 @@ int main(){
 	std::vector<double>bx, by;
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
-			phi[i][j] = j-N/2;
+			//phi[i][j] = j-N/2;
 			//phi[i][j] = j-N/2+.25*i;
+			phi[i][j] = i-M/2;
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
@@ -307,7 +312,7 @@ int main(){
 				for (int j = 0; j < dy.size(); ++j)
 					if (!mask_dy[i][j])
 						dy[i][j] = 0;
-			project(dx, dy, phi);
+			project(solid_phi, dx, dy, phi);
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
