@@ -90,14 +90,17 @@ def opengl(w, h, frameskip=False):
 		return ret
 	return decorate
 winsize = 500
-@opengl(winsize, winsize, frameskip=False)
-def draw(dx, dy, phi, bx, by):
-	phi = np.array(phi)
-	h, w = phi.shape
-	phi = ((np.concatenate((
-		phi.transpose(),
+def _image(arr):
+	arr = np.array(arr)
+	h, w = arr.shape
+	return h, w, ((np.concatenate((
+		arr.transpose(),
 		[[0]*((-w)%4)]*h,
 	), axis=1)+1)*128).clip(0, 255).astype("uint8").tostring()
+@opengl(winsize, winsize, frameskip=False)
+def draw(solid_phi, dx, dy, phi, bx, by):
+	h, w, phi = img_phi = _image(phi)
+	_, _, solid_phi = img_solid_phi = _image(solid_phi)
 	glPushMatrix()
 	if True:
 
@@ -105,33 +108,35 @@ def draw(dx, dy, phi, bx, by):
 		glClearColor(0., 0., 0., 0.)
 		glClear(GL_COLOR_BUFFER_BIT)
 
-		glColor3f(1, 1, 1)
-		glColorMask(1, 1, 1, 1)
+		for (img_h, img_w, img), color in (img_solid_phi, (0, 0, 1)), (img_phi, (1, 1, 0)):
+			glPushMatrix()
+			glScalef(img_w/float(w), img_h/float(h), 1.)
+			glColor3f(*color)
+			glColorMask(*(color+(1,)))
 
-		#glShadeModel(GL_SMOOTH)
-		#glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
-		#glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST) # instead of GL_LINEAR
-		glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, w, h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, phi)
-		glEnable(GL_TEXTURE_2D)
-		glBegin(GL_QUADS)
-		if True:
-			glTexCoord2f(0., 0.)
-			glVertex2f(-1., -1.)
-			glTexCoord2f(1., 0.)
-			glVertex2f( 1., -1.)
-			glTexCoord2f(1., 1.)
-			glVertex2f( 1.,  1.)
-			glTexCoord2f(0., 1.)
-			glVertex2f(-1.,  1.)
-		glEnd()
-		glDisable(GL_TEXTURE_2D)
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST) # instead of GL_LINEAR
+			glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+			glTexImage2D(GL_TEXTURE_2D, 0, GL_LUMINANCE, img_w, img_h, 0, GL_LUMINANCE, GL_UNSIGNED_BYTE, img)
+			glEnable(GL_TEXTURE_2D)
+			glBegin(GL_QUADS)
+			if True:
+				glTexCoord2f(0., 0.)
+				glVertex2f(-1., -1.)
+				glTexCoord2f(1., 0.)
+				glVertex2f( 1., -1.)
+				glTexCoord2f(1., 1.)
+				glVertex2f( 1.,  1.)
+				glTexCoord2f(0., 1.)
+				glVertex2f(-1.,  1.)
+			glEnd()
+			glDisable(GL_TEXTURE_2D)
+			glPopMatrix()
 
 		glTranslatef(-1., -1., 0.)
 		glScalef(2./w, 2./h, 1.)
 
 		glColor3f(0, 1, 0)
+		glColorMask(1, 1, 1, 1)
 		dx = np.array(dx)
 		dy = np.array(dy)
 		pos = np.concatenate((

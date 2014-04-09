@@ -266,14 +266,17 @@ int main(){
 #endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
-	grid phi = make_grid<double>(N, M);
+	grid phi = make_grid<double>(N, M), solid_phi = make_grid<double>(N+1, M+1);
 	std::vector<double>bx, by;
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
-			//phi[i][j] = j-N/2;
-			phi[i][j] = j-N/2+.25*i;
+			phi[i][j] = j-N/2;
+			//phi[i][j] = j-N/2+.25*i;
+	for (int i = 0; i <= M; ++i)
+		for (int j = 0; j <= N; ++j)
+			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
 	interpolate_surface(phi, bx, by);
-	rpc("draw", dx, dy, phi, bx, by);
+	rpc("draw", solid_phi, dx, dy, phi, bx, by);
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
@@ -310,13 +313,6 @@ int main(){
 			//rpc("deciles", std::string("dy"), dy);
 			dilate(dx, mask_dx);
 			dilate(dy, mask_dy);
-#if 0
-			dx = diffusion(dx, mu, 0, BOUNDARY_VERTICAL);
-			dy = diffusion(dy, mu, 0, BOUNDARY_HORIZONTAL);
-			project(dx, dy, phi);
-			dilate(dx, mask_dx);
-			dilate(dy, mask_dy);
-#endif
 		}
 
 		// advection
@@ -327,7 +323,7 @@ int main(){
 			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			phi = advection(phi, dx, dy, .5, .5, BOUNDARY_NONE);
 			interpolate_surface(phi, bx, by);
-			rpc("draw", dx, dy, phi, bx, by);
+			rpc("draw", solid_phi, dx, dy, phi, bx, by);
 		}
 
 		// write output
