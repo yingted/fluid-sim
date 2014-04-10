@@ -289,8 +289,8 @@ int main(){
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
 			//phi[i][j] = j-N/2;
-			//phi[i][j] = j-N/2+.25*i;
-			phi[i][j] = i-M/2;
+			phi[i][j] = j-N/2+.25*i;
+			//phi[i][j] = i-M/2;
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
@@ -303,6 +303,10 @@ int main(){
 		{
 			dx += fx;
 			dy += fy;
+			for (int i = 1; i+1 < dx.size(); ++i)
+				for (int j = 0; j < dx[0].size(); ++j)
+					if (phi[i-1][j] < 0 || phi[i][j] < 0) // ignore theta = epsilon
+						dx[i][j] += .25*g*THETA(i-1, j); // flow in
 			for (int i = 0; i < dy.size(); ++i)
 				for (int j = 1; j+1 < dy[0].size(); ++j)
 					if (phi[i][j-1] < 0 || phi[i][j] < 0) // ignore theta = epsilon
