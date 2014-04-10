@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <algorithm>
+#include <queue>
 #include "util.hpp"
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
@@ -26,6 +27,11 @@ void set_boundary(grid& a, double val, int type){
 		fill(a[0]    .begin(), a[0]    .end(), val); // x = 0
 		fill(a.back().begin(), a.back().end(), val);
 	}
+}
+
+template<typename T>
+int clamp(T x, int start, int stop){
+	return floor(std::max<T>(start, std::min<T>(nextafter(stop, start), x)));
 }
 
 double sample(const grid& a, double x, double y){
@@ -83,7 +89,7 @@ double phi_theta(double a, double b){
 }
 
 #define THETA(i2,j2) (std::max(1e-2, phi_theta(phi[i][j], phi[(i2)][(j2)])))
-void interpolate_surface(grid& phi, std::vector<double>& bx, std::vector<double>& by){
+void interpolate_surface(const grid& phi, std::vector<double>& bx, std::vector<double>& by){
 	bx.clear();
 	by.clear();
 	for (int i = 0; i < phi.size(); ++i)
@@ -106,6 +112,72 @@ void interpolate_surface(grid& phi, std::vector<double>& bx, std::vector<double>
 					CHECK(i, j+1);
 #undef CHECK
 			}
+}
+
+void check_phi(const grid& phi){
+	return;
+	for (int i = 0; i < phi.size(); ++i)
+		for (int j = 0; j < phi[0].size(); ++j)
+			for (int k = 0; k < phi.size(); ++k)
+				for (int l = 0; l < phi[0].size(); ++l)
+					assert(fabs(phi[i][j]-phi[k][l]) <= hypot(i-k, j-l)+2+1e-5);
+}
+
+void redistance(grid& phi, const std::vector<double>& bx, const std::vector<double>& by){
+	const grid phi0 = phi;
+	std::vector<std::vector<bool> >seen = make_grid<bool>(phi.size(), phi[0].size());
+	std::vector<std::vector<int> >ancestor = make_grid<int>(phi.size(), phi[0].size());
+	typedef std::pair<double, std::pair<int, int> >vertex_t;
+	std::priority_queue<vertex_t, std::vector<vertex_t>, std::greater<vertex_t> >q;
+	for (int i = 0; i < phi.size(); ++i)
+		for (int j = 0; j < phi[0].size(); ++j)
+			phi[i][j] = std::numeric_limits<double>::infinity();
+	for (int i = 0; i < bx.size(); ++i){
+		const int x_lo = clamp(bx[i]-.5, -1, phi.size()),
+		          y_lo = clamp(by[i]-.5, -1, phi[0].size());
+		for (int cx = max(0, x_lo); cx <= std::min<int>(phi.size()-1, x_lo+1); ++cx)
+			for (int cy = max(0, y_lo); cy <= std::min<int>(phi[0].size()-1, y_lo+1); ++cy){
+				const double d = hypot(cx+.5-bx[i], cy+.5-by[i]);
+				if (d < fabs(phi[cx][cy])){
+					phi[cx][cy] = copysign(d, sample(phi0, cx, cy));
+					ancestor[cx][cy] = i;
+					q.push(std::make_pair(d, std::make_pair(cx, cy)));
+				}
+			}
+	}
+	while (!q.empty()){
+		const double d = q.top().first;
+		const int cx = q.top().second.first,
+		          cy = q.top().second.second;
+		q.pop();
+		if (d != fabs(phi[cx][cy]))
+			continue;
+		seen[cx][cy] = true;
+		const int anc = ancestor[cx][cy];
+		const double x = bx[anc],
+		             y = by[anc];
+#define CHECK(i2,j2) do{\
+	const int i = (i2), j = (j2);\
+	if (!seen[i][j]){\
+		const double d2 = hypot(i+.5-x, j+.5-y);\
+		if (d2 < fabs(phi[i][j])){\
+			phi[i][j] = copysign(d2, sample(phi0, i, j));\
+			ancestor[i][j] = anc;\
+			q.push(std::make_pair(d2, std::make_pair(i, j)));\
+		}\
+	}\
+}while(0)
+		if (cx)
+			CHECK(cx-1, cy);
+		if (cx+1 < phi.size())
+			CHECK(cx+1, cy);
+		if (cy)
+			CHECK(cx, cy-1);
+		if (cy+1 < phi[0].size())
+			CHECK(cx, cy+1);
+#undef CHECK
+	}
+	check_phi(phi);
 }
 
 void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
@@ -276,20 +348,20 @@ void linear(std::vector<E>& a, T m, T b=0){
 int main(){
 	//srand(time(NULL));
 #ifdef NDEBUG
-	const int N = 500, M = 500, T = 1000;
+	const int N = 500, M = 500, T = 1000, redistance_period = 1;
 	const double gx = 0, gy = -.005;
 #else
-	const int N = 50, M = 50, T = 200;
-	//const int N = 10, M = 10, T = 1;
+	const int N = 50, M = 50, T = 200, redistance_period = 1;
+	//const int N = 10, M = 10, T = 1, redistance_period = 1;
 	const double gx = 0, gy = -.05, mu = .1;
 #endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	grid phi = make_grid<double>(N, M), solid_phi = make_grid<double>(N+1, M+1);
-	std::vector<double>bx, by;
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
+	check_phi(solid_phi);
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
 			phi[i][j] = std::max<double>(-solid_phi[i][j],
@@ -297,8 +369,11 @@ int main(){
 				//j-N/2+.25*i
 				i-M/2
 			);
-	interpolate_surface(phi, bx, by);
-	rpc("draw", solid_phi, dx, dy, phi, bx, by);
+	{
+		std::vector<double>bx, by;
+		interpolate_surface(phi, bx, by);
+		rpc("draw", solid_phi, dx, dy, phi, bx, by);
+	}
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
@@ -400,12 +475,15 @@ while(0)
 
 		// advection
 		{
+			std::vector<double>bx, by;
 			grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
 			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
 			dx = std::move(ndx);
 			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			phi = advection(phi, dx, dy, .5, .5, BOUNDARY_NONE);
 			interpolate_surface(phi, bx, by);
+			if ((t+1)%redistance_period == 0)
+				redistance(phi, bx, by);
 			rpc("draw", solid_phi, dx, dy, phi, bx, by);
 		}
 
