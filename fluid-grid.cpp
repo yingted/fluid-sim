@@ -318,13 +318,13 @@ int main(){
 						tan_mask_dx[i][j] = tan_mask_dx[i+1][j] = true; // give 1 cell leeway
 						tan_mask_dy[i][j] = tan_mask_dy[i][j+1] = true; // for boundary condition
 						if (
-								solid_phi[i][j] >= 0 ||
-								solid_phi[i][j+1] >= 0 ||
-								solid_phi[i+1][j] >= 0 ||
+								solid_phi[i][j] >= 0 &&
+								solid_phi[i][j+1] >= 0 &&
+								solid_phi[i+1][j] >= 0 &&
 								solid_phi[i+1][j+1] >= 0
-							){
-							mask_dx[i][j] = mask_dx[i+1][j] = true; // give 1 cell leeway
-							mask_dy[i][j] = mask_dy[i][j+1] = true; // for boundary condition
+							){ // radial component in fluid
+							mask_dx[i][j] = mask_dx[i+1][j] = true;
+							mask_dy[i][j] = mask_dy[i][j+1] = true;
 						}
 					}
 
