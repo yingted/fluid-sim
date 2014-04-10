@@ -152,10 +152,10 @@ def draw(solid_phi, dx, dy, phi, bx, by):
 			np.mgrid[map(slice, dy.shape)].reshape(2, dy.size)+np.transpose([[.5, 0]]*dy.size),
 		), axis=1)
 		vel = np.concatenate((
-			np.array([dx, np.zeros(dx.shape)]).reshape(2, dx.size),
-			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size),
+			np.array([dx, np.zeros(dx.shape)]).reshape(2, dx.size)*(float(winsize)/w),
+			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size)*(float(winsize)/h),
 		), axis=1)
-		vectors = np.rollaxis(np.array((pos, pos+vel*(float(winsize)/w))), -1)
+		vectors = np.rollaxis(np.array((pos, pos+vel)), -1)
 		glVertexPointerf(vectors)
 		glEnableClientState(GL_VERTEX_ARRAY)
 		glDrawArrays(GL_LINES, 0, 2*len(vectors))
