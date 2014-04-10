@@ -10,18 +10,24 @@ import OpenGL
 import fcntl
 import termios
 import struct
+import itertools
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
 def mat_to_array(mat):
 	index = mat['index']
 	value = mat['value']
-	ret = np.zeros((len(index), max(map(max, index))+1))
+	ret = np.zeros((len(index), max(itertools.chain((0,),itertools.chain.from_iterable(index)))+1))
 	for row, indices in enumerate(index):
 		for i, col in enumerate(indices):
 			ret[row, col] = value[row][i]
 	return ret
+def _square(mat):
+	if mat.shape[1] < mat.shape[0]:
+		mat = np.concatenate((mat, [[0]*(mat.shape[0]-mat.shape[1])]*len(mat)), axis=1)
+	return mat
 def check_symmetric(mat):
+	mat = _square(mat)
 	for row, col in zip(*np.nonzero(mat != mat.transpose())):
 		if row < col:
 			print "not symmetric", row, col, mat[row, col], mat[col, row]
@@ -43,16 +49,17 @@ def print_sum(name, mat):
 def opengl(w, h, frameskip=False):
 	def decorate(redraw):
 		lock = threading.Lock()
+		parent = [None]
 		q = collections.deque(maxlen = 1 if frameskip else None)
 		dirty = [True]
 		def idle():
 			with lock:
-				if not dirty[0]:
+				if not dirty[0] and len(q) > 1:
 					q.popleft()
 					dirty[0] = True
-				if q:
+				if len(q)-(not dirty[0]):
 					glutPostRedisplay()
-				elif not frameskip:
+				elif not frameskip and not parent[0].is_alive():
 					sys.exit()
 		def display():
 			with lock:
@@ -81,6 +88,7 @@ def opengl(w, h, frameskip=False):
 				glutDisplayFunc(display)
 				lock.release()
 				glutMainLoop()
+			parent[0] = threading.current_thread()
 			thread = threading.Thread(target=glut_thread)
 			thread.daemon = frameskip
 			thread.start()

@@ -157,7 +157,8 @@ void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
 			values.push_back(neighbours);
 			indices.push_back(ij);
 			rhs[ij] = div[i][j];
-			mat.add_sparse_row(ij, indices, values);
+			if (neighbours)
+				mat.add_sparse_row(ij, indices, values);
 			//std::cerr << "mat[" << i << "][" << j << "]: values = " << values << ", rhs = " << rhs[ij] << std::endl;
 			assert(values == values);
 		}
@@ -241,7 +242,19 @@ void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boun
 }
 
 template<typename T>
-void flip(std::vector<std::vector<T> > &a){ // rotate by pi
+void mask(T& a, const bool& mask_a, const T val){
+	if (!mask_a)
+		a = val;
+}
+
+template<typename T, typename B, typename V>
+void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rotate by pi
+	for (int i = 0; i < a.size(); ++i)
+		mask(a[i], mask_a[i], val);
+}
+
+template<typename T>
+void flip(std::vector<std::vector<T> >& a){ // rotate by pi
 	reverse(a.begin(), a.end());
 	for (std::vector<T>& row : a)
 		reverse(row.begin(), row.end());
@@ -297,27 +310,40 @@ int main(){
 
 		// velocity boundary conditions
 		{
-			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
+			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1), tan_mask_dx = mask_dx, tan_mask_dy = mask_dy;
 			for (int i = 0; i < phi.size(); ++i)
 				for (int j = 0; j < phi[0].size(); ++j)
 					if (phi[i][j] < 0){
-						mask_dx[i][j] = mask_dx[i+1][j] = true; // give 1 cell leeway
-						mask_dy[i][j] = mask_dy[i][j+1] = true; // for boundary condition
+						tan_mask_dx[i][j] = tan_mask_dx[i+1][j] = true; // give 1 cell leeway
+						tan_mask_dy[i][j] = tan_mask_dy[i][j+1] = true; // for boundary condition
+						if (
+								solid_phi[i][j] >= 0 ||
+								solid_phi[i][j+1] >= 0 ||
+								solid_phi[i+1][j] >= 0 ||
+								solid_phi[i+1][j+1] >= 0
+							){
+							mask_dx[i][j] = mask_dx[i+1][j] = true; // give 1 cell leeway
+							mask_dy[i][j] = mask_dy[i][j+1] = true; // for boundary condition
+						}
 					}
+
+			dilate(dx, mask_dx, BOUNDARY_VERTICAL);
+			dilate(dy, mask_dy, BOUNDARY_HORIZONTAL);
 			for (int i = 0; i < dx.size(); ++i)
-				for (int j = 0; j < dx.size(); ++j)
-					if (!mask_dx[i][j])
-						dx[i][j] = 0;
+				for (int j = 0; j < dx[0].size(); ++j)
+					mask_dx[i][j] = mask_dx[i][j] && tan_mask_dx[i][j];
 			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 0; j < dy.size(); ++j)
-					if (!mask_dy[i][j])
-						dy[i][j] = 0;
+				for (int j = 0; j < dy[0].size(); ++j)
+					mask_dy[i][j] = mask_dy[i][j] && tan_mask_dy[i][j];
+
+			mask(dx, mask_dx, 0.);
+			mask(dy, mask_dy, 0.);
 			project(solid_phi, dx, dy, phi);
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
-			dilate(dx, mask_dx);
-			dilate(dy, mask_dy);
+			dilate(dx, mask_dx, BOUNDARY_BORDER);
+			dilate(dy, mask_dy, BOUNDARY_BORDER);
 		}
 
 		// advection
@@ -331,6 +357,7 @@ int main(){
 			rpc("draw", solid_phi, dx, dy, phi, bx, by);
 		}
 
+#if 0
 		// write output
 		{
 			char *name;
@@ -352,6 +379,7 @@ int main(){
 				f << '\n';
 			}
 		}
+#endif
 	}
 #if 0
 flip(dx);
