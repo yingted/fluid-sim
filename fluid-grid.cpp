@@ -138,12 +138,14 @@ void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
 			double neighbours = 0;
 #define CHECK(i2,j2,w) do{\
 	double coef = (w);\
-	if (phi[(i2)][(j2)] < 0){\
-		values.push_back(-coef);\
-		indices.push_back(row[(i2)][(j2)]);\
-	}else\
-		coef /= THETA((i2),(j2));\
-	neighbours += coef;\
+	if (coef){\
+		if (phi[(i2)][(j2)] < 0){\
+			values.push_back(-coef);\
+			indices.push_back(row[(i2)][(j2)]);\
+		}else\
+			coef /= THETA((i2),(j2));\
+		neighbours += coef;\
+	}\
 }while(0)
 			if (i > 0)
 				CHECK(i-1, j, THETA_X(i, j));
@@ -317,7 +319,12 @@ int main(){
 			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
 			for (int i = 0; i < phi.size(); ++i)
 				for (int j = 0; j < phi[0].size(); ++j)
-					if (phi[i][j] < 0){
+					if (phi[i][j] < 0 && (
+							solid_phi[i][j] >= 0 ||
+							solid_phi[i][j+1] >= 0 ||
+							solid_phi[i+1][j] >= 0 ||
+							solid_phi[i+1][j+1] >= 0
+						)){
 						mask_dx[i][j] = mask_dx[i+1][j] = true;
 						mask_dy[i][j] = mask_dy[i][j+1] = true;
 					}
@@ -333,37 +340,59 @@ int main(){
 
 			grid ndx = dx;
 			for (int i = 0; i < dx.size(); ++i)
-				for (int j = 0; j < dx[0].size(); ++j){
-					const double theta = phi_theta(solid_phi[i][j], solid_phi[i][j+1]);
-					if (theta > 0){
+				for (int j = 0; j < dx[0].size(); ++j)
+					if (THETA_X(i, j) == 0 && mask_dx[i][j]){
 						const int i_lo = max(0, i-1), i_hi = min(((int)dx.size())-1, i+1);
-						const double plus = (solid_phi[i_hi][j+1]-solid_phi[i_lo][j])/(i_hi-i_lo),
-						            minus = (solid_phi[i_hi][j]-solid_phi[i_lo][j+1])/(i_hi-i_lo),
-						               nx = plus+minus,
-						               ny = plus-minus,
-						               ux = dx[i][j],
-						               uy = .25*(dy[i-1][j]+dy[i-1][j+1]+dy[i][j]+dy[i][j+1]),
-						               nn = nx*nx+ny*ny;
+						double plus = solid_phi[i_hi][j+1]-solid_phi[i_lo][j],
+						      minus = solid_phi[i_hi][j]-solid_phi[i_lo][j+1],
+						         nx = (plus+minus)/(i_hi-i_lo),
+						         ny = plus-minus,
+						         ux = dx[i][j],
+						         uy = 0,
+						         nn = nx*nx+ny*ny,
+						 neighbours = 0;
+#define CHECK(i2,j2) do\
+	if (mask_dy[(i2)][(j2)]){\
+		uy += dy[(i2)][(j2)];\
+		neighbours += 1;\
+	}\
+while(0)
+						CHECK(i_lo, j);
+						CHECK(i_lo, j+1);
+						CHECK(i_hi-1, j);
+						CHECK(i_hi-1, j+1);
+#undef CHECK
+						uy /= neighbours;
 						if (nn)
 							ndx[i][j] = ux-(nx*ux+ny*uy)/nn*nx;
 					}
-				}
 			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 0; j < dy[0].size(); ++j){
-					const double theta = phi_theta(solid_phi[i][j], solid_phi[i+1][j]);
-					if (theta > 0){
+				for (int j = 0; j < dy[0].size(); ++j)
+					if (THETA_Y(i, j) == 0 && mask_dy[i][j]){
 						const int j_lo = max(0, j-1), j_hi = min(((int)dy[0].size())-1, j+1);
-						const double plus = (solid_phi[i+1][j_hi]-solid_phi[i][j_lo])/(j_hi-j_lo),
-						            minus = (solid_phi[i+1][j_lo]-solid_phi[i][j_hi])/(j_hi-j_lo),
-						               nx = plus+minus,
-						               ny = plus-minus,
-						               ux = .25*(dx[i-1][j]+dx[i-1][j+1]+dx[i][j]+dx[i][j+1]),
-						               uy = dy[i][j],
-						               nn = nx*nx+ny*ny;
+						double plus = solid_phi[i+1][j_hi]-solid_phi[i][j_lo],
+						      minus = solid_phi[i+1][j_lo]-solid_phi[i][j_hi],
+						         nx = plus+minus,
+						         ny = (plus-minus)/(j_hi-j_lo),
+						         ux = 0,
+						         uy = dy[i][j],
+						         nn = nx*nx+ny*ny,
+						 neighbours = 0;
+#define CHECK(i2,j2) do\
+	if (mask_dx[(i2)][(j2)]){\
+		ux += dx[(i2)][(j2)];\
+		neighbours += 1;\
+	}\
+while(0)
+						CHECK(i, j_lo);
+						CHECK(i+1, j_lo);
+						CHECK(i, j_hi-1);
+						CHECK(i+1, j_hi-1);
+#undef CHECK
+						ux /= neighbours;
 						if (nn)
-							dy[i][j] = uy-(ny*uy+ny*uy)/nn*ny;
+							dy[i][j] = uy-(nx*ux+ny*uy)/nn*ny;
 					}
-				}
 			dx = std::move(ndx);
 		}
 
