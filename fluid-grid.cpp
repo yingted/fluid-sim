@@ -287,14 +287,16 @@ int main(){
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	grid phi = make_grid<double>(N, M), solid_phi = make_grid<double>(N+1, M+1);
 	std::vector<double>bx, by;
-	for (int i = 0; i < M; ++i)
-		for (int j = 0; j < N; ++j)
-			//phi[i][j] = j-N/2;
-			//phi[i][j] = j-N/2+.25*i;
-			phi[i][j] = i-M/2;
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
+	for (int i = 0; i < M; ++i)
+		for (int j = 0; j < N; ++j)
+			phi[i][j] = std::max<double>(-solid_phi[i][j],
+				//j-N/2
+				//j-N/2+.25*i
+				i-M/2
+			);
 	interpolate_surface(phi, bx, by);
 	rpc("draw", solid_phi, dx, dy, phi, bx, by);
 	//for (int j = 1; j < M/2; ++j)
