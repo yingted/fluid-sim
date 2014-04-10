@@ -276,11 +276,11 @@ int main(){
 	//srand(time(NULL));
 #ifdef NDEBUG
 	const int N = 500, M = 500, T = 1000;
-	const double g = -.005;
+	const double gx = 0, gy = -.005;
 #else
 	const int N = 50, M = 50, T = 200;
 	//const int N = 10, M = 10, T = 1;
-	const double g = -.05, mu = .1;
+	const double gx = 0, gy = -.05, mu = .1;
 #endif
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
@@ -289,8 +289,8 @@ int main(){
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
 			//phi[i][j] = j-N/2;
-			phi[i][j] = j-N/2+.25*i;
-			//phi[i][j] = i-M/2;
+			//phi[i][j] = j-N/2+.25*i;
+			phi[i][j] = i-M/2;
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
@@ -306,40 +306,22 @@ int main(){
 			for (int i = 1; i+1 < dx.size(); ++i)
 				for (int j = 0; j < dx[0].size(); ++j)
 					if (phi[i-1][j] < 0 || phi[i][j] < 0) // ignore theta = epsilon
-						dx[i][j] += .25*g*THETA(i-1, j); // flow in
+						dx[i][j] += gx*THETA(i-1, j); // flow in
 			for (int i = 0; i < dy.size(); ++i)
 				for (int j = 1; j+1 < dy[0].size(); ++j)
 					if (phi[i][j-1] < 0 || phi[i][j] < 0) // ignore theta = epsilon
-						dy[i][j] += g*THETA(i, j-1); // flow in
+						dy[i][j] += gy*THETA(i, j-1); // flow in
 		}
 
 		// velocity boundary conditions
 		{
-			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1), tan_mask_dx = mask_dx, tan_mask_dy = mask_dy;
+			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
 			for (int i = 0; i < phi.size(); ++i)
 				for (int j = 0; j < phi[0].size(); ++j)
 					if (phi[i][j] < 0){
-						tan_mask_dx[i][j] = tan_mask_dx[i+1][j] = true; // give 1 cell leeway
-						tan_mask_dy[i][j] = tan_mask_dy[i][j+1] = true; // for boundary condition
-						if (
-								solid_phi[i][j] >= 0 &&
-								solid_phi[i][j+1] >= 0 &&
-								solid_phi[i+1][j] >= 0 &&
-								solid_phi[i+1][j+1] >= 0
-							){ // radial component in fluid
-							mask_dx[i][j] = mask_dx[i+1][j] = true;
-							mask_dy[i][j] = mask_dy[i][j+1] = true;
-						}
+						mask_dx[i][j] = mask_dx[i+1][j] = true;
+						mask_dy[i][j] = mask_dy[i][j+1] = true;
 					}
-
-			dilate(dx, mask_dx, BOUNDARY_VERTICAL);
-			dilate(dy, mask_dy, BOUNDARY_HORIZONTAL);
-			for (int i = 0; i < dx.size(); ++i)
-				for (int j = 0; j < dx[0].size(); ++j)
-					mask_dx[i][j] = mask_dx[i][j] && tan_mask_dx[i][j];
-			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 0; j < dy[0].size(); ++j)
-					mask_dy[i][j] = mask_dy[i][j] && tan_mask_dy[i][j];
 
 			mask(dx, mask_dx, 0.);
 			mask(dy, mask_dy, 0.);
@@ -347,8 +329,43 @@ int main(){
 			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
 			//rpc("deciles", std::string("dx"), dx);
 			//rpc("deciles", std::string("dy"), dy);
-			dilate(dx, mask_dx, BOUNDARY_BORDER);
-			dilate(dy, mask_dy, BOUNDARY_BORDER);
+			dilate(dx, mask_dx);
+			dilate(dy, mask_dy);
+
+			grid ndx = dx;
+			for (int i = 0; i < dx.size(); ++i)
+				for (int j = 0; j < dx[0].size(); ++j){
+					const double theta = phi_theta(solid_phi[i][j], solid_phi[i][j+1]);
+					if (theta > 0){
+						const int i_lo = max(0, i-1), i_hi = min(((int)dx.size())-1, i+1);
+						const double plus = (solid_phi[i_hi][j+1]-solid_phi[i_lo][j])/(i_hi-i_lo),
+						            minus = (solid_phi[i_hi][j]-solid_phi[i_lo][j+1])/(i_hi-i_lo),
+						               nx = plus+minus,
+						               ny = plus-minus,
+						               ux = dx[i][j],
+						               uy = .25*(dy[i-1][j]+dy[i-1][j+1]+dy[i][j]+dy[i][j+1]),
+						               nn = nx*nx+ny*ny;
+						if (nn)
+							ndx[i][j] = ux-(nx*ux+ny*uy)/nn*nx;
+					}
+				}
+			for (int i = 0; i < dy.size(); ++i)
+				for (int j = 0; j < dy[0].size(); ++j){
+					const double theta = phi_theta(solid_phi[i][j], solid_phi[i+1][j]);
+					if (theta > 0){
+						const int j_lo = max(0, j-1), j_hi = min(((int)dy[0].size())-1, j+1);
+						const double plus = (solid_phi[i+1][j_hi]-solid_phi[i][j_lo])/(j_hi-j_lo),
+						            minus = (solid_phi[i+1][j_lo]-solid_phi[i][j_hi])/(j_hi-j_lo),
+						               nx = plus+minus,
+						               ny = plus-minus,
+						               ux = .25*(dx[i-1][j]+dx[i-1][j+1]+dx[i][j]+dx[i][j+1]),
+						               uy = dy[i][j],
+						               nn = nx*nx+ny*ny;
+						if (nn)
+							dy[i][j] = uy-(ny*uy+ny*uy)/nn*ny;
+					}
+				}
+			dx = std::move(ndx);
 		}
 
 		// advection
