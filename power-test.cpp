@@ -88,6 +88,7 @@ leaf:
 }
 
 int tested_count;
+time_t start, last;
 
 bool test_octree(rand_bool& rng){
 	std::set<Weighted_point>pts;
@@ -127,8 +128,19 @@ bool test_octree(rand_bool& rng){
 		}
 	}
 	++tested_count;
-	//std::cout << '.';
-	//std::cout.flush();
+
+	{	
+		const static int period = 5;
+		time_t now = time(NULL);
+		if (now-last >= period){
+			last = now;
+			std::cerr << tested_count << " octrees in " << now-start << " s" << std::endl;
+			std::cerr << "rng: ";
+			for (int i = 0; i < rng.pos; ++i)
+				std::cerr << rng.history[i];
+			std::cerr << std::endl;
+		}
+	}
 	return true;
 }
 
@@ -140,8 +152,8 @@ int main(int argc, char *argv[]){
 	}
 	branch_radius_cutoff = pow(.5, atof(argv[1]));
 	std::cout << "testing with branch node cutoff radius " << branch_radius_cutoff << std::endl;
+	start = last = time(NULL);
 	rand_bool().feed(test_octree);
-	//std::cout << std::endl;
-	std::cout << "tested " << tested_count << " octrees" << std::endl;
+	std::cout << "finished " << tested_count << " octrees in " << time(NULL)-start << " s" << std::endl;
 	return 0;
 }
