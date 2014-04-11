@@ -24,15 +24,40 @@ typedef Rt::Finite_edges_iterator                           Finite_edges_iterato
 typedef Rt::Cell_circulator                                 Cell_circulator;
 typedef Rt::Cell_handle                                     Cell_handle;
 
-struct rand_bool{
+class rand_bool{
+public:
+	virtual bool operator()() = 0;
+	virtual void report(){};
+	virtual void feed(bool (*cb)(rand_bool&)){
+		while (cb(*this) && this->next());
+	}
+protected:
+	virtual bool next() = 0; // cannot be called after returning false
+};
+
+class exhaustive_rng : public rand_bool{
+private:
 	std::vector<bool>history;
 	int pos;
-	bool operator()(){
+public:
+	virtual bool operator()(){
 		if (pos == history.size())
 			history.push_back(false);
 		return history[pos++];
 	}
-	bool next(){
+	virtual void feed(bool (*cb)(rand_bool&)){
+		history.clear();
+		pos = 0;
+		rand_bool::feed(cb);
+	}
+	virtual void report(){
+		std::cerr << "rng: ";
+		for (int i = 0; i < pos; ++i)
+			std::cerr << history[i];
+		std::cerr << std::endl;
+	}
+protected:
+	virtual bool next(){
 		assert (pos == history.size());
 		while (!history.empty() && history.back())
 			history.pop_back();
@@ -43,10 +68,19 @@ struct rand_bool{
 		pos = 0;
 		return true;
 	}
-	void feed(bool (*cb)(rand_bool&)){
-		history.clear();
-		pos = 0;
-		while(cb(*this) && this->next());
+};
+
+class random_rng : public rand_bool{
+private:
+	int count, stop;
+public:
+	random_rng(int n) : count(0), stop(n){}
+	virtual bool operator()(){
+		return rand()&1;
+	}
+protected:
+	virtual bool next(){
+		return ++count < stop;
 	}
 };
 
@@ -144,10 +178,7 @@ bool test_octree(rand_bool& rng){
 		if (now-last >= period){
 			last = now;
 			std::cerr << tested_count << " octrees in " << now-start << " s" << std::endl;
-			std::cerr << "rng: ";
-			for (int i = 0; i < rng.pos; ++i)
-				std::cerr << rng.history[i];
-			std::cerr << std::endl;
+			rng.report();
 		}
 	}
 	return true;
@@ -155,14 +186,19 @@ bool test_octree(rand_bool& rng){
 
 
 int main(int argc, char *argv[]){
-	if (argc != 2){
-		std::cerr << "usage: " << argv[0] << " depth" << std::endl;
+	if (argc != 2 && argc != 3){
+		std::cerr << "usage: " << argv[0] << " depth [random runs]" << std::endl;
 		return 1;
 	}
 	branch_radius_cutoff = pow(.5, atof(argv[1]));
 	std::cout << "testing with branch node cutoff radius " << branch_radius_cutoff << std::endl;
 	start = last = time(NULL);
-	rand_bool().feed(test_octree);
+	if (argc == 2)
+		exhaustive_rng().feed(test_octree);
+	else{
+		srand(start);
+		random_rng(atoi(argv[2])).feed(test_octree);
+	}
 	std::cout << "finished in " << time(NULL)-start << " s" << std::endl;
 	std::cout << "hits:" << std::endl;
 	for (std::map<const char*, int>::const_iterator it = hit_counter.begin(); it != hit_counter.end(); ++it)
