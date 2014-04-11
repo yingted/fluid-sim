@@ -2,6 +2,9 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Regular_triangulation_3.h>
 #include <CGAL/Regular_triangulation_euclidean_traits_3.h>
+#include <boost/random/variate_generator.hpp>
+#include <boost/nondet_random.hpp>
+#include <boost/random/bernoulli_distribution.hpp>
 #include <fstream>
 #include <cassert>
 #include <vector>
@@ -73,10 +76,13 @@ protected:
 class random_rng : public rand_bool{
 private:
 	int count, stop;
+	const boost::bernoulli_distribution<>dist;
+	boost::random_device dev;
+	boost::variate_generator<boost::random_device&, boost::bernoulli_distribution<> >rng;
 public:
-	random_rng(int n) : count(0), stop(n){}
+	random_rng(int n) : count(0), stop(n), dev(), dist(), rng(dev, dist){}
 	virtual bool operator()(){
-		return rand()&1;
+		return rng();
 	}
 protected:
 	virtual bool next(){
@@ -214,10 +220,8 @@ int main(int argc, char *argv[]){
 	start = last = time(NULL);
 	if (argc == 2)
 		exhaustive_rng().feed(test_octree);
-	else{
-		srand(start);
+	else
 		random_rng(atoi(argv[2])).feed(test_octree);
-	}
 	std::cout << "finished in " << time(NULL)-start << " s" << std::endl;
 	std::cout << "hits:" << std::endl;
 	for (std::map<const char*, int>::const_iterator it = hit_counter.begin(); it != hit_counter.end(); ++it)
