@@ -21,10 +21,7 @@ typedef Traits::Weighted_point                              Weighted_point;
 typedef CGAL::Regular_triangulation_3<Traits>               Rt;
 
 typedef Rt::Finite_edges_iterator                           Finite_edges_iterator;
-typedef Rt::Vertex_iterator                                 Vertex_iterator;
-typedef Rt::Vertex_handle                                   Vertex_handle;
-typedef Rt::Facet                                           Facet;
-typedef Rt::Segment                                         Segment;
+typedef Rt::Cell_circulator                                 Cell_circulator;
 typedef Rt::Cell_handle                                     Cell_handle;
 
 struct rand_bool{
@@ -56,6 +53,7 @@ struct rand_bool{
 const Iso_cuboid_3 domain(-1, -1, -1, 1, 1, 1);
 double branch_radius_cutoff;
 std::map<const char*, int>hit_counter;
+std::map<K::FT, int>area_counter;
 
 void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 	std::queue<std::pair<Point, double> >q;
@@ -107,6 +105,7 @@ bool test_octree(rand_bool& rng){
 	//std::cout << "cells (including ghost): " << pts.size() << std::endl;
 	//for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
 	//	std::cout << *it << std::endl;
+#if 0
 	{
 		std::map<Weight, int>weight_count;
 		for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
@@ -116,74 +115,41 @@ bool test_octree(rand_bool& rng){
 		std::cout << "total: " << pts.size() << std::endl;
 		std::cout << std::endl;
 	}
+#endif
 	Rt T;
 	ptrdiff_t num_inserted = T.insert(pts.begin(), pts.end());
-	assert(pts.size() == num_inserted); // check for hidden
+	assert(pts.size() == num_inserted); // check for hidden XXX need to change traits
 	assert(T.is_valid());
 	//std::cout << "faces: " << T.number_of_finite_edges() << std::endl;
 	for (Finite_edges_iterator it = T.finite_edges_begin(); it != T.finite_edges_end(); ++it){
 		Weighted_point a = it->first->vertex(it->second)->point(),
-		               b = it->first->vertex(it->third)->point();
-		if (domain.has_on_unbounded_side(a) && domain.has_on_unbounded_side(b))
-			continue;
-		if (a.weight() < b.weight())
-			std::swap(a, b); // make a larger
-		const Vector_3 d = b-a;
-		const double R2 = a.weight(), r2 = b.weight(), d2 = d.squared_length();
-#define COUNT(w) ((d.x()*d.x() == (w))+(d.y()*d.y() == (w))+(d.z()*d.z() == (w)))
-		//std::cout << a << ", " << b << std::endl;
-		const double r = sqrt(r2), R = sqrt(R2), rR = r+R;
-		if (d2 == 3*rR*rR) // single point
-			continue;
-		switch (COUNT(rR*rR)){
-			case 0: // 3d intersection volume
-				assert(false);
-			case 1: // 2d plane
-				if (R2 == r2){
-					++hit_counter["case 1: same level"];
-					assert(COUNT(0) == 2);
-				}else if (R2 == 4*r2){
-					++hit_counter["case 2: unit \"knight's move\""];
-					assert(COUNT(r2) == 2);
-				}else
-					assert(false);
+					   b = it->first->vertex(it->third)->point();
+		switch (domain.has_on_unbounded_side(a)+domain.has_on_unbounded_side(b)){
+			case 0:
+				++hit_counter["interior faces"];
 				break;
-			case 2: // 1d (small slice)
-				if (R2 == 4*r2){
-					++hit_counter["case 3: abbb"];
-					assert(COUNT(r2) == 1);
-					if (d[0]*d[0] == rR*rR)
-						assert(pts.count(Weighted_point(a+Vector_3(d[0]-copysign(R, d[0]), d[1], d[2]), r2)));
-					if (d[1]*d[1] == rR*rR)
-						assert(pts.count(Weighted_point(a+Vector_3(d[0], d[1]-copysign(R, d[1]), d[2]), r2)));
-					if (d[2]*d[2] == rR*rR)
-						assert(pts.count(Weighted_point(a+Vector_3(d[0], d[1], d[2]-copysign(R, d[2])), r2)));
-				}else if (R2 == r2){
-					++hit_counter["case 4: axab"];
-					assert(COUNT(0) == 1);
-					//std::cout << a << ", " << b << std::endl;
-					int adjacent_large =
-						+ (d[0] && pts.count(Weighted_point(a+Vector_3(d[0]-copysign(R, d[0]), d[1], d[2]), R2)))
-						+ (d[1] && pts.count(Weighted_point(a+Vector_3(d[0], d[1]-copysign(R, d[1]), d[2]), R2)))
-						+ (d[2] && pts.count(Weighted_point(a+Vector_3(d[0], d[1], d[2]-copysign(R, d[2])), R2))),
-						adjacent_small =
-						+ (d[0] && pts.count(Weighted_point(a+Vector_3(d[0]-copysign(.5*R, d[0]), d[1], d[2]), .25*R2)))
-						+ (d[1] && pts.count(Weighted_point(a+Vector_3(d[0], d[1]-copysign(.5*R, d[1]), d[2]), .25*R2)))
-						+ (d[2] && pts.count(Weighted_point(a+Vector_3(d[0], d[1], d[2]-copysign(.5*R, d[2])), .25*R2)));
-					assert(adjacent_small);
-					assert(adjacent_large+adjacent_large == 2);
-				}else
-					assert(false);
-				break;
-			case 3: // 0d (must be no area)
-				assert(false);
-				break;
+			case 1:
+				++hit_counter["border faces"];
+				continue;
+			case 2:
+				++hit_counter["ghost faces"];
+				continue;
 		}
-#undef COUNT
-	}
-	const int tested_count = ++hit_counter["octrees"];
 
-	{	
+		Vector_3 area2(0, 0, 0);
+		Cell_circulator u = T.incident_cells(*it), end = u; // loop through uertices
+		assert(u != 0);
+		do{
+			Cell_circulator v = u;
+			++v;
+			area2 = area2+cross_product(T.dual(u)-CGAL::ORIGIN, T.dual(v)-CGAL::ORIGIN);
+		}while(++u != end);
+		Weight w = CGAL::min(a.weight(), b.weight()); // normalize by smaller weight
+		++area_counter[.25*area2.squared_length()/(w*w)];
+	}
+
+	{
+		const int tested_count = ++hit_counter["octrees"];
 		const static int period = 5;
 		time_t now = time(NULL);
 		if (now-last >= period){
@@ -209,7 +175,13 @@ int main(int argc, char *argv[]){
 	start = last = time(NULL);
 	rand_bool().feed(test_octree);
 	std::cout << "finished in " << time(NULL)-start << " s" << std::endl;
+	std::cout << "hits:" << std::endl;
 	for (std::map<const char*, int>::const_iterator it = hit_counter.begin(); it != hit_counter.end(); ++it)
 		printf("%10d %s\n", it->second, it->first);
+	std::cout << "(area/r^2)^2, r <= R: " << area_counter.size() << " areas" << std::endl;
+	for (std::map<Weight, int>::const_iterator it = area_counter.begin(); it != area_counter.end(); ++it){
+		printf("%10d ", it->second);
+		std::cout << it->first << std::endl;
+	}
 	return 0;
 }
