@@ -30,4 +30,6 @@ apitrace:
 	cd apitrace && cmake -H. -Bbuild -DCMAKE_BUILD_TYPE=Release && make -C build
 pcgsolver:
 	curl http://www.cs.ubc.ca/~rbridson/fluidsimulation/pcgsolver.tar.gz | tar xz
+power-test: power-test.cpp
+	g++ $(CFLAGS) -o power-test{,.cpp} -lCGAL -lgmp -O3
 .PHONY: clean smoke-grid-play fluid-grid-play util-test-run
