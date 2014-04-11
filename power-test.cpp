@@ -105,17 +105,6 @@ bool test_octree(rand_bool& rng){
 	//std::cout << "cells (including ghost): " << pts.size() << std::endl;
 	//for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
 	//	std::cout << *it << std::endl;
-#if 0
-	{
-		std::map<Weight, int>weight_count;
-		for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
-			++weight_count[it->weight()];
-		for (std::map<Weight, int>::const_iterator it = weight_count.begin(); it != weight_count.end(); ++it)
-			std::cout << it->first << ": " << it->second << std::endl;
-		std::cout << "total: " << pts.size() << std::endl;
-		std::cout << std::endl;
-	}
-#endif
 	Rt T;
 	ptrdiff_t num_inserted = T.insert(pts.begin(), pts.end());
 	assert(pts.size() == num_inserted); // check for hidden XXX need to change traits
@@ -129,7 +118,7 @@ bool test_octree(rand_bool& rng){
 				++hit_counter["interior faces"];
 				break;
 			case 1:
-				++hit_counter["border faces"];
+				++hit_counter["border faces"]; // XXX need to check this
 				continue;
 			case 2:
 				++hit_counter["ghost faces"];
