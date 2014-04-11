@@ -141,7 +141,7 @@ int main(int argc, char *argv[]){
 	branch_radius_cutoff = pow(.5, atof(argv[1]));
 	std::cout << "testing with branch node cutoff radius " << branch_radius_cutoff << std::endl;
 	rand_bool().feed(test_octree);
-	std::cout << std::endl;
+	//std::cout << std::endl;
 	std::cout << "tested " << tested_count << " octrees" << std::endl;
 	return 0;
 }
