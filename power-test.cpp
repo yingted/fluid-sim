@@ -2,9 +2,9 @@
 #include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Regular_triangulation_3.h>
 #include <CGAL/Regular_triangulation_euclidean_traits_3.h>
+#include <fstream>
 #include <cassert>
 #include <vector>
-#include <sstream>
 #include <queue>
 
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
@@ -132,6 +132,9 @@ leaf:
 }
 
 time_t start, last;
+#ifdef OUTPUT
+std::ofstream obj(OUTPUT);
+#endif
 
 bool test_octree(rand_bool& rng){
 	std::set<Weighted_point>pts;
@@ -153,20 +156,36 @@ bool test_octree(rand_bool& rng){
 				break;
 			case 1:
 				++hit_counter["border faces"]; // XXX need to check this
-				continue;
+				continue; // change to break to render boxes
 			case 2:
 				++hit_counter["ghost faces"];
 				continue;
 		}
 
 		Vector_3 area2(0, 0, 0);
-		Cell_circulator u = T.incident_cells(*it), end = u; // loop through uertices
+		Cell_circulator u = T.incident_cells(*it), end = u; // loop through vertices
 		assert(u != 0);
+#ifdef OUTPUT
+		static int vertices = 0;
+		int old_vertices = vertices;
+		int count = hit_counter["octrees"], wrap = 10;
+		Vector_3 origin = 5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap);
+#endif
 		do{
 			Cell_circulator v = u;
 			++v;
+#ifdef OUTPUT
+			obj << "v " << T.dual(u)+origin << '\n';
+			++vertices;
+#endif
 			area2 = area2+cross_product(T.dual(u)-CGAL::ORIGIN, T.dual(v)-CGAL::ORIGIN);
 		}while(++u != end);
+#ifdef OUTPUT
+		obj << 'f';
+		for (int i = old_vertices+1; i <= vertices; ++i)
+			obj << ' ' << i;
+		obj << '\n';
+#endif
 		Weight w = CGAL::min(a.weight(), b.weight()); // normalize by smaller weight
 		++area_counter[.25*area2.squared_length()/(w*w)];
 	}
