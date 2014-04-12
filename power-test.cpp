@@ -110,7 +110,7 @@ void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 		if (r <= branch_radius_cutoff)
 			goto leaf;
 		{
-			const Weight parent_weight(2*(2*r)*(2*r));
+			const Weight parent_weight(3*((2*r)*(2*r)));
 			for (int i = -3; i <= 3; i += 2)
 				for (int j = -3; j <= 3; j += 2)
 					for (int k = -3; k <= 3; k += 2)
@@ -122,7 +122,7 @@ void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 		}
 		if (!rng()){
 leaf:
-			const Weight w(2*r*r);
+			const Weight w(3*(r*r));
 			pts.insert(Weighted_point(c, w));
 			for (int i = -1; i <= 1; ++i) // insert ghost cells to check boundary conditions
 				for (int j = -1; j <= 1; ++j)
@@ -160,7 +160,7 @@ bool test_octree(rand_bool& rng){
 	//std::cout << "faces: " << T.number_of_finite_edges() << std::endl;
 	for (Finite_edges_iterator it = T.finite_edges_begin(); it != T.finite_edges_end(); ++it){
 		Weighted_point a = it->first->vertex(it->second)->point(),
-					   b = it->first->vertex(it->third)->point();
+		               b = it->first->vertex(it->third)->point();
 		switch (domain.has_on_unbounded_side(a)+domain.has_on_unbounded_side(b)){
 			case 0:
 				++hit_counter["interior faces"];
@@ -190,7 +190,7 @@ bool test_octree(rand_bool& rng){
 			++v;
 #ifdef OUTPUT
 			const Point o = T.dual(u)+origin;
-#ifdef EXACT
+#ifdef EXACT_OUTPUT
 			const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
 			CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
 			            w = integral_division(w0, gcd(w0, z.denominator()))*z.denominator();
@@ -209,7 +209,7 @@ bool test_octree(rand_bool& rng){
 		obj << '\n';
 #endif
 		Weight w = CGAL::min(a.weight(), b.weight()); // normalize by smaller weight
-		++area_counter[.25*area2.squared_length()/(w*w)];
+		++area_counter[area2.squared_length()/(16*w*w/9)];
 	}
 
 	{
