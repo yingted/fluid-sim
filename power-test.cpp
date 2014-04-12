@@ -105,7 +105,7 @@ void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 		if (r <= branch_radius_cutoff)
 			goto leaf;
 		{
-			const Weight parent_weight((2*r)*(2*r));
+			const Weight parent_weight(2*(2*r)*(2*r));
 			for (int i = -3; i <= 3; i += 2)
 				for (int j = -3; j <= 3; j += 2)
 					for (int k = -3; k <= 3; k += 2)
@@ -117,7 +117,7 @@ void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 		}
 		if (!rng()){
 leaf:
-			const Weight w(r*r);
+			const Weight w(2*r*r);
 			pts.insert(Weighted_point(c, w));
 			for (int i = -1; i <= 1; ++i) // insert ghost cells to check boundary conditions
 				for (int j = -1; j <= 1; ++j)
