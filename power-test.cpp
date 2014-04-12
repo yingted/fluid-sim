@@ -114,7 +114,7 @@ void rand_pts(std::set<Weighted_point>& pts, Point c, double r, rand_bool& rng){
 			for (int i = -3; i <= 3; i += 2)
 				for (int j = -3; j <= 3; j += 2)
 					for (int k = -3; k <= 3; k += 2)
-						if (i*i+j*j+k*k == 11){
+						if (i*i+j*j+k*k == 11 || i*i+j*j+k*k == 19){
 							const Point p = c+r*Vector_3(i, j, k);
 							if (!domain.has_on_unbounded_side(p) && pts.count(Weighted_point(p, parent_weight)))
 								goto leaf;
