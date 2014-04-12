@@ -162,7 +162,10 @@ bool test_octree(rand_bool& rng){
 				break;
 			case 1:
 				++hit_counter["border faces"]; // XXX need to check this
-				continue; // change to break to render boxes
+#ifdef BORDER
+				break;
+#endif
+				continue;
 			case 2:
 				++hit_counter["ghost faces"];
 				continue;
