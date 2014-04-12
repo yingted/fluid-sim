@@ -32,4 +32,6 @@ pcgsolver:
 	curl http://www.cs.ubc.ca/~rbridson/fluidsimulation/pcgsolver.tar.gz | tar xz
 power-test: power-test.cpp
 	g++ $(CFLAGS) -o power-test{,.cpp} -lCGAL -lgmp -lboost_random -O3
+power-test-out: power-test.cpp
+	g++ -std=c++11 -Ipcgsolver -o power-test{-out,.cpp} -lCGAL -lboost_random -lgmp -D'OUTPUT="out.obj"' -DEXACT -lmpfr -lboost_thread-mt -O3
 .PHONY: clean smoke-grid-play fluid-grid-play util-test-run

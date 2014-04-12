@@ -1,5 +1,4 @@
 // taken from CGAL-4.4:examples/Triangulation_3/regular_3.cpp
-#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 #include <CGAL/Regular_triangulation_3.h>
 #include <CGAL/Regular_triangulation_euclidean_traits_3.h>
 #include <boost/random/variate_generator.hpp>
@@ -10,16 +9,22 @@
 #include <vector>
 #include <queue>
 
+#ifdef EXACT
+#include <CGAL/Exact_predicates_exact_constructions_kernel.h>
+typedef CGAL::Exact_predicates_exact_constructions_kernel   K;
+#else
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
 typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+#endif
 
 typedef K::Vector_3                                         Vector_3;
-typedef K::Iso_cuboid_3                                     Iso_cuboid_3;
 
 typedef CGAL::Regular_triangulation_euclidean_traits_3<K>   Traits;
 
 typedef Traits::RT                                          Weight;
 typedef Traits::Bare_point                                  Point;
 typedef Traits::Weighted_point                              Weighted_point;
+typedef Traits::Iso_cuboid_3                                Iso_cuboid_3;
 
 typedef CGAL::Regular_triangulation_3<Traits>               Rt;
 
@@ -184,7 +189,15 @@ bool test_octree(rand_bool& rng){
 			Cell_circulator v = u;
 			++v;
 #ifdef OUTPUT
-			obj << "v " << T.dual(u)+origin << '\n';
+			const Point o = T.dual(u)+origin;
+#ifdef EXACT
+			const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
+			CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
+			            w = integral_division(w0, gcd(w0, z.denominator()))*z.denominator();
+			obj << "v " << (x*w).numerator() << ' ' << (y*w).numerator() << ' ' << (z*w).numerator() << ' ' << w << '\n';
+#else
+			obj << "v " << o << '\n';
+#endif
 			++vertices;
 #endif
 			area2 = area2+cross_product(T.dual(u)-CGAL::ORIGIN, T.dual(v)-CGAL::ORIGIN);
