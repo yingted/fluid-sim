@@ -21,7 +21,7 @@ struct quad{ // NULL is the infinite cell
 	const int index;
 	const double x, y, r;
 	const constexpr static int cos[4] = {1, 0, -1, 0}, sin[4] = {0, 1, 0, -1};
-	double dx, dy, phi;
+	double u[4], phi;
 	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
 	quad(quad *parent, int index) : parent(parent), index(index), neighbour(), child(),
 		r(.5*parent->r),
@@ -100,38 +100,57 @@ found:;
 		assert(this == query(sx, sy));
 		sx -= x;
 		sy -= y;
-		double px, py, pv;
+		double px, py, pr = 0, pv,
+		       rx, ry, rr = 0, rv; // shares corner and same-area face
 		for (int i = 0; i < 9; ++i){
 			const int j = i/2%4;
 			if (!(neighbour[j] && neighbour[j]->child[0]))
 				++i;
-			double qx, qy, qv;
+			double qx, qy, qr, qv, pqv;
+#define SET(q,n) do{\
+	q##x = (n)->x-x;\
+	q##y = (n)->y-y;\
+	q##r = (n)->r;\
+	q##v = *(double*)(((char*)(n))+offset);\
+}while(0)
 			if (!neighbour[j]){ // infinite cell (insert ghost cell)
 				qx = 2*r*cos[j]; // TODO fix to make boundary 0
 				qy = 2*r*sin[j];
+				qr = r;
 				qv = 0;
 			}else{
 				const quad *n = neighbour[j]->child[0] ? neighbour[j]->child[(j+1+i%2)%4] : neighbour[j];
-				qx = n->x-x;
-				qy = n->y-y;
-				qv = *(double*)(((char*)n)+offset);
+				SET(q, n);
 			}
-			if (i){ // 0, q, p
-				double D = py*qx-px*qy, // determinant
-				     Dpl = qx*sy-qy*sx,
-				     Dql = py*sx-px*sy,
-				     Drl = D-Dpl-Dql;
-				if (D < 0 ? // check if D?l/D \in [0, 1] without division
-						0 <= Dpl && Dpl <= D &&
-						0 <= Dql && Dql <= D: // rl condition checks if s is too far
-						D <= Dpl && Dpl <= 0 &&
-						D <= Dql && Dql <= 0){
-					return(Dpl*pv+Dql*qv+Drl**(double*)(((char*)this)+offset))/D;
+			if (i){
+				const quad *pred = neighbour[j]->neighbour[(j+3)%4];
+				if (!rr && pred && pred->r == neighbour[j]->r)
+					SET(r, pred);
+				if (rr){ // 0, p, r, q
+					assert(!"bilinear interpolation not implemented");
+				}else{// 0, p, q
+					double D = py*qx-px*qy, // determinant
+						 Dpl = qx*sy-qy*sx,
+						 Dql = py*sx-px*sy,
+						 Drl = D-Dpl-Dql;
+					if (D < 0 ? // check if D?l/D \in [0, 1] without division
+							0 <= Dpl && Dpl <= D &&
+							0 <= Dql && Dql <= D: // rl condition checks if s is too far, and should always be true
+							D <= Dpl && Dpl <= 0 &&
+							D <= Dql && Dql <= 0){
+						return(Dpl*pv+Dql*qv+Drl**(double*)(((char*)this)+offset))/D;
+					}
 				}
 			}
 			px = qx;
 			py = qy;
 			pv = qv;
+			const quad *succ = neighbour[j]->neighbour[(j+1)%4];
+			if (succ && succ->r == neighbour[j]->r)
+				SET(r, succ);
+			else
+				rr = 0;
+#undef SET
 		}
 		assert(!"sample not implemented");
 	}
