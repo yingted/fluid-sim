@@ -14,55 +14,85 @@
 #include <pcg_solver.h>
 
 struct quad{ // NULL is the infinite cell
-	quad *neighbours[4]; // right up left down
-	quad *children[4]; // NE NW SW SE
+	quad *neighbour[4]; // right up left down
+	quad *child[4]; // NE NW SW SE
 	const quad *parent;
 	const int index;
 	const double x, y, r;
 	const constexpr static int cos[4] = {1, 0, -1, 0}, sin[4] = {0, 1, 0, -1};
 	double dx, dy, phi;
-	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbours(), children(){}
-	quad(quad *parent, int index) : parent(parent), index(index), neighbours(), children(),
+	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
+	quad(quad *parent, int index) : parent(parent), index(index), neighbour(), child(),
 		r(.5*parent->r),
 		x(parent->x+r*(cos[index]-sin[index])), // add pi/4
 		y(parent->y+r*(cos[index]+sin[index])){
 		assert(parent != NULL);
 		assert(0 <= index && index < 4);
+		for (int i = 0; i < 4; ++i){
+			assert((i == index || i == (index+1)%4) == ((cos[index]-sin[index])*cos[i]+(cos[index]+sin[index])*sin[i]));
+			if (i == index || i == (index+1)%4) // positive dot product, shared wall
+				neighbour[i] = parent->neighbour[i]; // larger neighbour
+			else{ // same size neighbour
+				if (i == (index+2)%4) // next
+					neighbour[i] = parent->child[(index+1)%4];
+				else if (i == (index+3)%4) // prev
+					neighbour[i] = parent->child[(index+3)%4];
+				assert(neighbour[i]->r == r);
+				if (neighbour[i])
+					neighbour[i]->neighbour[(i+2)%4] = this;
+			}
+		}
 	}
 	void check_relations(){
 		assert(!parent == (index == -1));
 		if (parent){
 			assert(0 <= index && index < 4);
-			assert(parent->children[index] == this);
+			assert(parent->child[index] == this);
 			assert(r == .5*parent->r);
 			assert(x == parent->x+r*(cos[index]-sin[index]));
 			assert(y == parent->y+r*(cos[index]+sin[index]));
 		}
 		for (int i = 0; i < 4; ++i)
-			if (neighbours[i]){
-				assert(neighbours[i]->r >= r);
-				if (neighbours[i]->r > r){
-					assert(r == .5*neighbours[i]->r);
+			if (neighbour[i]){
+				assert(neighbour[i]->r >= r);
+				if (neighbour[i]->r > r){
+					assert(r == .5*neighbour[i]->r);
 					for (int j = 0; j < 4; ++j)
-						assert(neighbours[i]->children[j] == NULL);
+						assert(neighbour[i]->child[j] == NULL);
 				}
-				const double big = neighbours[i]->r+r,
-				           small = neighbours[i]->r-r;
+				const double big = neighbour[i]->r+r,
+				           small = neighbour[i]->r-r;
 				for (int j = 0; j < 4; ++j){
 					for (int k = -1; k <= -1; k += 2)
-						if (neighbours[i]->x == cos[j]*big-sin[j]*small*k &&
-							neighbours[i]->y == sin[j]*big+cos[j]*small*k)
+						if (neighbour[i]->x == cos[j]*big-sin[j]*small*k &&
+							neighbour[i]->y == sin[j]*big+cos[j]*small*k)
 							goto found;
 					assert(false); // not found
 found:;
 				}
-				assert(neighbours[i]->neighbours[(i+2)%4] == (neighbours[i]->r == r ? this : parent));
+				assert(neighbour[i]->neighbour[(i+2)%4] == (neighbour[i]->r == r ? this : parent));
 			}
 		for (int i = 0; i < 4; ++i){
-			assert(!children[0] == !children[i]);
-			if (children[i])
-				children[i]->check_relations();
+			assert(!child[0] == !child[i]);
+			if (child[i])
+				child[i]->check_relations();
 		}
+	}
+	double sample(double sx, double sy){
+		assert(x-r <= sx && sx <= x+r && y-r <= sy && sy <= y+r);
+		assert(!"sample not implemented");
+	}
+	void split(){
+		for (int i = 0; i < 4; ++i){
+			assert(!child[i]);
+			child[i] = new quad(this, i);
+		}
+		assert(!"split not implemented");
+	}
+	void merge(){
+		for (int i = 0; i < 4; ++i)
+			assert(child[i]);
+		assert(!"merge not implemented");
 	}
 };
 
@@ -345,6 +375,9 @@ void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rota
 }
 
 int main(){
+	const int N = 50, M = 50, T = 200, redistance_period = 1;
+	//const int N = 10, M = 10, T = 1, redistance_period = 1;
+	const double gx = 0, gy = -.05, mu = .1;
 	// coordinates: math-style
 	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
 	grid phi = make_grid<double>(N, M), solid_phi = make_grid<double>(N+1, M+1);
