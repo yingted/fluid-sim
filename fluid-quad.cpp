@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdlib>
+#include <cstddef>
 #include <algorithm>
 #include <queue>
 #include "util.hpp"
@@ -78,15 +79,60 @@ found:;
 				child[i]->check_relations();
 		}
 	}
-	void range_check(double px, double py)const{
-		assert(x-r <= px && px <= x+r && y-r <= py && py <= y+r);
+	bool contains(double px, double py)const{
+		return x-r <= px && px <= x+r && y-r <= py && py <= y+r;
 	}
-	quad *&query(double px, double py){
-		range_check(px, py);
-		assert(!"query not implemented");
+	const quad *query(double px, double py)const{
+		assert(contains(px, py));
+		if (!child[0])
+			return this;
+		for (int i = 0; i < 4; ++i)
+			if (child[i]->contains(px, py))
+				return child[i];
+		assert(false);
 	}
-	double sample(double sx, double sy){
+	quad *query(double px, double py){
+		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
+	}
+	double sample(double sx, double sy, size_t offset)const{
+		if (!contains(sx, sy))
+			return 0; // TODO clever sampling
 		assert(this == query(sx, sy));
+		sx -= x;
+		sy -= y;
+		double px, py, pv;
+		for (int i = 0; i < 9; ++i){
+			const int j = i/2%4;
+			if (!(neighbour[j] && neighbour[j]->child[0]))
+				++i;
+			double qx, qy, qv;
+			if (!neighbour[j]){ // infinite cell (insert ghost cell)
+				qx = 2*r*cos[j]; // TODO fix to make boundary 0
+				qy = 2*r*sin[j];
+				qv = 0;
+			}else{
+				const quad *n = neighbour[j]->child[0] ? neighbour[j]->child[(j+1+i%2)%4] : neighbour[j];
+				qx = n->x-x;
+				qy = n->y-y;
+				qv = *(double*)(((char*)n)+offset);
+			}
+			if (i){ // 0, q, p
+				double D = py*qx-px*qy, // determinant
+				     Dpl = qx*sy-qy*sx,
+				     Dql = py*sx-px*sy,
+				     Drl = D-Dpl-Dql;
+				if (D < 0 ? // check if D?l/D \in [0, 1] without division
+						0 <= Dpl && Dpl <= D &&
+						0 <= Dql && Dql <= D: // rl condition checks if s is too far
+						D <= Dpl && Dpl <= 0 &&
+						D <= Dql && Dql <= 0){
+					return(Dpl*pv+Dql*qv+Drl**(double*)(((char*)this)+offset))/D;
+				}
+			}
+			px = qx;
+			py = qy;
+			pv = qv;
+		}
 		assert(!"sample not implemented");
 	}
 	void split(){
