@@ -43,23 +43,6 @@ double sample(const grid& a, double x, double y){
 	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
 }
 
-grid diffusion(const grid& a0, double mu, double boundary, int type){
-	assert (!a0.empty() && !a0[0].empty());
-	grid a = a0;
-	for (int t = 0; t < 20; ++t){
-		for (int i = 1; i+1 < a0.size(); ++i)
-			for (int j = 1; j+1 < a0[i].size(); ++j)
-				a[i][j] = (a0[i][j]+mu*(
-					+a[i-1][j  ]
-					+a[i+1][j  ]
-					+a[i  ][j-1]
-					+a[i  ][j+1]
-					))/(1+4*mu);
-		set_boundary(a, boundary, type);
-	}
-	return a;
-}
-
 grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double oy, int type){
 	grid a = a0;
 	for (int i = 0; i < a0.size(); ++i)
@@ -67,15 +50,6 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
 	set_boundary(a, 0, type);
 	return std::move(a);
-}
-
-void advect(std::vector<double>& mx, std::vector<double>& my, const grid& dx, const grid& dy){
-	for (int i = 0; i < mx.size(); ++i){
-		const double cur_dx = sample(dx, mx[i], my[i]),
-		             cur_dy = sample(dy, mx[i], my[i]);
-		mx[i] += .5*(cur_dx+sample(dx, mx[i]+cur_dx, my[i]+cur_dy));
-		my[i] += .5*(cur_dy+sample(dy, mx[i]+cur_dx, my[i]+cur_dy));
-	}
 }
 
 double phi_theta(double a, double b){
@@ -112,15 +86,6 @@ void interpolate_surface(const grid& phi, std::vector<double>& bx, std::vector<d
 					CHECK(i, j+1);
 #undef CHECK
 			}
-}
-
-void check_phi(const grid& phi){
-	return;
-	for (int i = 0; i < phi.size(); ++i)
-		for (int j = 0; j < phi[0].size(); ++j)
-			for (int k = 0; k < phi.size(); ++k)
-				for (int l = 0; l < phi[0].size(); ++l)
-					assert(fabs(phi[i][j]-phi[k][l]) <= hypot(i-k, j-l)+2+1e-5);
 }
 
 void redistance(grid& phi, const std::vector<double>& bx, const std::vector<double>& by){
@@ -177,7 +142,6 @@ void redistance(grid& phi, const std::vector<double>& bx, const std::vector<doub
 			CHECK(cx, cy+1);
 #undef CHECK
 	}
-	check_phi(phi);
 }
 
 void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
@@ -327,24 +291,6 @@ void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rota
 		mask(a[i], mask_a[i], val);
 }
 
-template<typename T>
-void flip(std::vector<std::vector<T> >& a){ // rotate by pi
-	reverse(a.begin(), a.end());
-	for (std::vector<T>& row : a)
-		reverse(row.begin(), row.end());
-}
-
-template<typename T>
-void linear(T& a, T m, T b=0){ // transform by mx+b
-	a = m*a + b;
-}
-
-template<typename T, typename E>
-void linear(std::vector<E>& a, T m, T b=0){
-	for (E& row : a)
-		linear(row, m, b);
-}
-
 int main(){
 	//srand(time(NULL));
 #ifdef NDEBUG
@@ -361,7 +307,6 @@ int main(){
 	for (int i = 0; i <= M; ++i)
 		for (int j = 0; j <= N; ++j)
 			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
-	check_phi(solid_phi);
 	for (int i = 0; i < M; ++i)
 		for (int j = 0; j < N; ++j)
 			phi[i][j] = std::max<double>(-solid_phi[i][j],
@@ -486,38 +431,6 @@ while(0)
 				redistance(phi, bx, by);
 			rpc("draw", solid_phi, dx, dy, phi, bx, by);
 		}
-
-#if 0
-		// write output
-		{
-			char *name;
-			{
-				int bytes = asprintf(&name, "fluid-grid-%04d.ppm", t+1);
-				assert(bytes >= 0);
-			}
-			std::ofstream f(name);
-			free(name);
-			double dpeak = 1;
-			//unsigned short peak = ~0;
-			unsigned short peak = 255;
-			f << "P3\n" << N << ' ' << M << "\n" << peak << "\n";
-			for (int j = M-1; j >=0; --j){
-				for (int i = 0; i < N; ++i)
-					for (const double& val : {.5*(dx[i][j]+dx[i+1][j]), phi[i][j]*2-dpeak, .5*(dy[i][j]+dy[i][j+1])}) // rgb
-					//for (const double& val : {p[i][j]*2-dpeak, p[i][j]*2-dpeak, p[i][j]*2-dpeak}) // grey
-						f << (unsigned short)(std::max(0., std::min((double)peak, round((val+1)/2/dpeak*peak)))) << ' ';
-				f << '\n';
-			}
-		}
-#endif
 	}
-#if 0
-flip(dx);
-flip(dy);
-flip(phi);
-linear(g, -1.);
-linear(dx, -1.);
-linear(dy, -1.);
-#endif
 	return 0;
 } // vim: set ts=4 sw=4 noet:
