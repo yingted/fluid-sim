@@ -78,8 +78,15 @@ found:;
 				child[i]->check_relations();
 		}
 	}
+	void range_check(double px, double py)const{
+		assert(x-r <= px && px <= x+r && y-r <= py && py <= y+r);
+	}
+	quad *&query(double px, double py){
+		range_check(px, py);
+		assert(!"query not implemented");
+	}
 	double sample(double sx, double sy){
-		assert(x-r <= sx && sx <= x+r && y-r <= sy && sy <= y+r);
+		assert(this == query(sx, sy));
 		assert(!"sample not implemented");
 	}
 	void split(){
