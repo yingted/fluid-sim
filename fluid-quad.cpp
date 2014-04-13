@@ -20,8 +20,8 @@ struct quad{ // NULL is the infinite cell
 	const quad *parent;
 	const int index;
 	const double x, y, r;
-	const constexpr static int cos[4] = {1, 0, -1, 0}, sin[4] = {0, 1, 0, -1};
-	double u[4], phi;
+	const static int cos[4], sin[4];
+	double u[4], solid_phi, phi;
 	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
 	quad(quad *parent, int index) : parent(parent), index(index), neighbour(), child(),
 		r(.5*parent->r),
@@ -30,7 +30,7 @@ struct quad{ // NULL is the infinite cell
 		assert(parent != NULL);
 		assert(0 <= index && index < 4);
 		for (int i = 0; i < 4; ++i){
-			assert((i == index || i == (index+1)%4) == ((cos[index]-sin[index])*cos[i]+(cos[index]+sin[index])*sin[i]));
+			assert((i == index || i == (index+1)%4) == ((cos[index]-sin[index])*cos[i]+(cos[index]+sin[index])*sin[i] > 0));
 			if (i == index || i == (index+1)%4) // positive dot product, shared wall
 				neighbour[i] = parent->neighbour[i]; // larger neighbour
 			else{ // same size neighbour
@@ -193,6 +193,7 @@ if ((n) && !(n)->neighbour[(k)]){\
 		assert(!"merge not implemented");
 	}
 };
+const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
 
 #define BOUNDARY_NONE (0)
 #define BOUNDARY_VERTICAL (1)
@@ -473,6 +474,24 @@ void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rota
 }
 
 int main(){
+	quad *root = new quad(0, 0, 1);
+	{
+		std::queue<quad*>q;
+		q.push(root);
+		while (!q.empty()){
+			quad* const c = q.front();
+			q.pop();
+			c->solid_phi = 1-hypot(c->x, c->y);
+			c->phi = max(-c->solid_phi, c->x+.25*c->y);
+			c->split();
+			if (c->r >= 1-c->x && c->r >= 1e-1)
+				for (int i = 0; i < 4; ++i)
+					q.push(c->child[i]);
+		}
+	}
+	return 0;
+}
+int old_main(){
 	const int N = 50, M = 50, T = 200, redistance_period = 1;
 	//const int N = 10, M = 10, T = 1, redistance_period = 1;
 	const double gx = 0, gy = -.05, mu = .1;
