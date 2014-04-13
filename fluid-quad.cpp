@@ -96,12 +96,13 @@ found:;
 	}
 	double sample(double sx, double sy, size_t offset)const{
 		if (!contains(sx, sy))
-			return 0; // TODO clever sampling
+			return 0; // TODO clip
 		assert(this == query(sx, sy));
 		sx -= x;
 		sy -= y;
+		const double v = *(double*)(((char*)this)+offset);
 		double px, py, pr = 0, pv,
-		       rx, ry, rr = 0, rv; // shares corner and same-area face
+		       rx, ry, rr = 0, rv; // shares corner and same-area face (incl. ghost)
 		for (int i = 0; i < 9; ++i){
 			const int j = i/2%4;
 			if (!(neighbour[j] && neighbour[j]->child[0]))
@@ -113,19 +114,24 @@ found:;
 	q##r = (n)->r;\
 	q##v = *(double*)(((char*)(n))+offset);\
 }while(0)
-			if (!neighbour[j]){ // infinite cell (insert ghost cell)
-				qx = 2*r*cos[j]; // TODO fix to make boundary 0
-				qy = 2*r*sin[j];
-				qr = r;
-				qv = 0;
-			}else{
+#define IF_TRY_GHOST(q,n,k) \
+if ((n) && !(n)->neighbour[(k)]){\
+	q##r = (n)->r;\
+	q##x = 2*q##r*cos[(k)];\
+	q##y = 2*q##r*sin[(k)];\
+	q##v = -*(double*)(((char*)(n))+offset);\
+}
+			IF_TRY_GHOST(q, this, j)
+			else{
 				const quad *n = neighbour[j]->child[0] ? neighbour[j]->child[(j+1+i%2)%4] : neighbour[j];
 				SET(q, n);
 			}
 			if (i){
 				const quad *pred = neighbour[j]->neighbour[(j+3)%4];
-				if (!rr && pred && pred->r == neighbour[j]->r)
-					SET(r, pred);
+				if (!rr)
+					if (pred && pred->r == neighbour[j]->r)
+						SET(r, pred);
+					else IF_TRY_GHOST(r, neighbour[j], (j+3)%4);
 				if (rr){ // 0, p, r, q
 					assert(!"bilinear interpolation not implemented");
 				}else{// 0, p, q
@@ -138,7 +144,7 @@ found:;
 							0 <= Dql && Dql <= D: // rl condition checks if s is too far, and should always be true
 							D <= Dpl && Dpl <= 0 &&
 							D <= Dql && Dql <= 0){
-						return(Dpl*pv+Dql*qv+Drl**(double*)(((char*)this)+offset))/D;
+						return(Dpl*pv+Dql*qv+Drl*v)/D;
 					}
 				}
 			}
@@ -148,7 +154,8 @@ found:;
 			const quad *succ = neighbour[j]->neighbour[(j+1)%4];
 			if (succ && succ->r == neighbour[j]->r)
 				SET(r, succ);
-			else
+			else IF_TRY_GHOST(r, neighbour[j], (j+1)%4)
+			else 
 				rr = 0;
 #undef SET
 		}
