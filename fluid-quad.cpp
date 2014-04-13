@@ -95,15 +95,16 @@ found:;
 		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
 	}
 	double sample(double sx, double sy, size_t offset)const{
+		assert(!child[0]);
 		sx = max(-r, min(r, sx-x));
 		sy = max(-r, min(r, sy-y));
-		assert(this == query(x+sx, y+sy));
 		const double v = *(double*)(((char*)this)+offset);
 		double px, py, pr = 0, pv,
 		       rx, ry, rr = 0, rv; // shares corner and same-area face (incl. ghost)
 		for (int i = 0; i < 9; ++i){
 			const int j = i/2%4;
-			if (!(neighbour[j] && neighbour[j]->child[0]))
+			const quad *n = neighbour[j];
+			if (!(n && n->child[0]))
 				++i;
 			double qx, qy, qr, qv, pqv;
 #define SET(q,n) do{\
@@ -121,18 +122,39 @@ if ((n) && !(n)->neighbour[(k)]){\
 }
 			IF_TRY_GHOST(q, this, j)
 			else{
-				const quad *n = neighbour[j]->child[0] ? neighbour[j]->child[(j+1+i%2)%4] : neighbour[j];
+				const quad *n = n->child[0] ? n->child[(j+1+i%2)%4] : n;
 				SET(q, n);
 			}
 			if (i){
-				const quad *pred = neighbour[j]->neighbour[(j+3)%4];
-				if (!rr)
-					if (pred && pred->r == neighbour[j]->r)
+				const quad *pred = n->neighbour[(j+3)%4];
+				if (r != qr)
+					rr = 0;
+				if (!rr && r == pr)
+					if (pred && pred->r == n->r)
 						SET(r, pred);
-					else IF_TRY_GHOST(r, neighbour[j], (j+3)%4);
+					else IF_TRY_GHOST(r, n, (j+3)%4);
 				if (rr){ // 0, p, r, q
-					assert(!"bilinear interpolation not implemented");
-				}else{// 0, p, q
+					double lx, ly;
+					if (!px || !qx){
+						lx = sx/rx;
+						if (0 <= lx && lx <= 1)
+							if (!px)
+								ly = (sy-lx*(r-qr))/(2*(r-lx*(r-qr)));
+							else
+								ly = (sy-lx*(r-pr))/(2*(r-lx*(r-pr)));
+					}else{
+						assert(!py || !qy);
+						ly = sy/ry;
+						if (0 <= ly && ly <= 1)
+							if (!py)
+								lx = (sx-ly*(r-qr))/(2*(r-ly*(r-qr)));
+							else
+								lx = (sx-ly*(r-pr))/(2*(r-ly*(r-pr)));
+					}
+					if (0 <= lx && lx <= 1 &&
+						0 <= ly && ly <= 1)
+						return lx*(1-ly)*pv+lx*ly*qv+(1-lx)*ly*rv+(1-lx)*(1-ly)*v;
+				}else{ // 0, p, q
 					double D = py*qx-px*qy, // determinant
 						 Dpl = qx*sy-qy*sx,
 						 Dql = py*sx-px*sy,
@@ -141,18 +163,17 @@ if ((n) && !(n)->neighbour[(k)]){\
 							0 <= Dpl && Dpl <= D &&
 							0 <= Dql && Dql <= D: // rl condition checks if s is too far, and should always be true
 							D <= Dpl && Dpl <= 0 &&
-							D <= Dql && Dql <= 0){
-						return(Dpl*pv+Dql*qv+Drl*v)/D;
-					}
+							D <= Dql && Dql <= 0)
+						return (Dpl*pv+Dql*qv+Drl*v)/D;
 				}
 			}
 			px = qx;
 			py = qy;
 			pv = qv;
-			const quad *succ = neighbour[j]->neighbour[(j+1)%4];
-			if (succ && succ->r == neighbour[j]->r)
+			const quad *succ = n->neighbour[(j+1)%4];
+			if (succ && succ->r == n->r)
 				SET(r, succ);
-			else IF_TRY_GHOST(r, neighbour[j], (j+1)%4)
+			else IF_TRY_GHOST(r, n, (j+1)%4)
 			else 
 				rr = 0;
 #undef SET
