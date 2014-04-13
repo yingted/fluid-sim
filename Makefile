@@ -9,6 +9,8 @@ smoke-grid: smoke-grid.cpp util.hpp
 	g++ $(CFLAGS) -o smoke-grid{,.cpp}
 fluid-grid: fluid-grid.cpp util.hpp pcgsolver
 	g++ $(CFLAGS) -o fluid-grid{,.cpp} -L/usr/lib64/atlas -lcblas
+fluid-quad: fluid-quad.cpp util.hpp pcgsolver
+	g++ $(CFLAGS) -o fluid-quad{,.cpp} -L/usr/lib64/atlas -lcblas
 clean:
 	rm -f {smoke,fluid}-grid{,-gl}{,-*.ppm,.mkv,.trace} util-test
 smoke-grid-0001.ppm: smoke-grid
