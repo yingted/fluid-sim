@@ -95,11 +95,9 @@ found:;
 		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
 	}
 	double sample(double sx, double sy, size_t offset)const{
-		if (!contains(sx, sy))
-			return 0; // TODO clip
-		assert(this == query(sx, sy));
-		sx -= x;
-		sy -= y;
+		sx = max(-r, min(r, sx-x));
+		sy = max(-r, min(r, sy-y));
+		assert(this == query(x+sx, y+sy));
 		const double v = *(double*)(((char*)this)+offset);
 		double px, py, pr = 0, pv,
 		       rx, ry, rr = 0, rv; // shares corner and same-area face (incl. ghost)
