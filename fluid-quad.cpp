@@ -22,6 +22,12 @@ struct quad{ // NULL is the infinite cell
 	const double x, y, r;
 	const static int cos[4], sin[4];
 	double u[4], solid_phi, phi;
+	void copy_from(const quad *o){
+		solid_phi = o->solid_phi;
+		phi = o->phi;
+		for (int i = 0; i < 4; ++i)
+			u[i] = o->u[i];
+	}
 	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
 	quad(quad *parent, int index) : parent(parent), index(index), neighbour(), child(),
 		r(.5*parent->r),
@@ -38,7 +44,7 @@ struct quad{ // NULL is the infinite cell
 					neighbour[i] = parent->child[(index+1)%4];
 				else if (i == (index+3)%4) // prev
 					neighbour[i] = parent->child[(index+3)%4];
-				assert(neighbour[i]->r == r);
+				assert(!neighbour[i] || neighbour[i]->r == r);
 				if (neighbour[i])
 					neighbour[i]->neighbour[(i+2)%4] = this;
 			}
@@ -184,8 +190,8 @@ if ((n) && !(n)->neighbour[(k)]){\
 		for (int i = 0; i < 4; ++i){
 			assert(!child[i]);
 			child[i] = new quad(this, i);
+			child[i]->copy_from(this);
 		}
-		assert(!"split not implemented");
 	}
 	void merge(){
 		for (int i = 0; i < 4; ++i)
