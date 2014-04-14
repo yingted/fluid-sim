@@ -47,17 +47,19 @@ struct quad{ // NULL is the infinite cell
 		assert(0 <= index && index < 4);
 		for (int i = 0; i < 4; ++i){
 			assert((i == index || i == (index+1)%4) == ((cos[index]-sin[index])*cos[i]+(cos[index]+sin[index])*sin[i] > 0));
-			if (i == index || i == (index+1)%4) // positive dot product, shared wall
+			if (i == index || i == (index+1)%4){ // positive dot product, shared wall
 				neighbour[i] = parent->neighbour[i]; // larger neighbour
-			else{ // same size neighbour
+				if (neighbour[i] && neighbour[i]->child[0]) // child 1+i+(i-index)
+					neighbour[i] = neighbour[i]->child[(3*index+2*i+1)%4];
+			}else{ // same size neighbour
 				if (i == (index+2)%4) // next
 					neighbour[i] = parent->child[(index+1)%4];
 				else if (i == (index+3)%4) // prev
 					neighbour[i] = parent->child[(index+3)%4];
 				assert(!neighbour[i] || neighbour[i]->r == r);
-				if (neighbour[i])
-					neighbour[i]->neighbour[(i+2)%4] = this;
 			}
+			if (neighbour[i] && neighbour[i]->r == r)
+				neighbour[i]->neighbour[(i+2)%4] = this;
 		}
 	}
 	void check_relations(){
@@ -79,12 +81,11 @@ struct quad{ // NULL is the infinite cell
 				}
 				const double big = neighbour[i]->r+r,
 				           small = neighbour[i]->r-r;
-				for (int j = 0; j < 4; ++j){
-					for (int k = -1; k <= -1; k += 2)
+				for (int j = 0; j < 4; ++j)
+					for (int k = -1; k <= 1; k += 2)
 						if (neighbour[i]->x == x+(cos[j]*big-sin[j]*small*k) &&
 							neighbour[i]->y == y+(sin[j]*big+cos[j]*small*k))
 							goto found;
-				}
 				assert(false); // not found
 found:;
 				assert(neighbour[i]->neighbour[(i+2)%4] == (neighbour[i]->r == r ? this : parent));
@@ -201,11 +202,15 @@ if ((n) && !(n)->neighbour[(k)]){\
 		}
 		assert(false); // sample failed
 	}
-	void split(){
+	void split(std::function<void(quad*)>cb){
+		for (int i = 0; i < 4; ++i)
+			if (neighbour[i] && neighbour[i]->r > r)
+				neighbour[i]->split(cb);
+		for (int i = 0; i < 4; ++i)
+			assert(!neighbour[i] || neighbour[i]->r == r);
 		for (int i = 0; i < 4; ++i){
 			assert(!child[i]);
-			child[i] = new quad(this, i);
-			child[i]->copy_from(this);
+			cb(child[i] = new quad(this, i));
 		}
 	}
 	void merge(){
@@ -245,12 +250,11 @@ int main(){
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
 		c->solid_phi = 1-hypot(c->x, c->y);
 		c->phi = max(-c->solid_phi, c->x+.25*c->y);
-		//if (!(c->x+c->r >=1 && c->r >= 1e-1))
-		if (c->r < 1e-2)
+		if (c->r < (min(fabs(c->solid_phi), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
 			continue;
-		c->split();
-		for (int i = 0; i < 4; ++i)
-			a.push_back(c->child[i]);
+		c->split([&a](quad *n){
+			a.push_back(n);
+		});
 	}
 	root->check_relations();
 	rpc("draw_quad", a);

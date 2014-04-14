@@ -174,7 +174,6 @@ def draw(solid_phi, dx, dy, phi, bx, by):
 	glPopMatrix()
 @opengl(winsize, winsize, frameskip=False)
 def draw_quad(cells):
-	del cells[::2]
 	vecs = {k : map(operator.itemgetter(k), cells) for k in cells[0]}
 	N = sum(vecs['leaf'])
 	vecs = {k : np.fromiter(itertools.compress(v, vecs['leaf']), np.float, N) for k, v in vecs.iteritems()}
@@ -188,18 +187,17 @@ def _draw_quad_vecs(solid_phi, phi, x, y, r):
 	glClear(GL_COLOR_BUFFER_BIT)
 
 	glEnableClientState(GL_VERTEX_ARRAY)
-	assert (r == 2**-7).all() # XXX
 	lx = x-r
 	ly = y-r
 	hx = x+r
 	hy = y+r
 	cells = np.array([lx, ly, hx, ly, hx, hy, lx, hy]).transpose().reshape((-1, 2))
-	print cells[:5] # XXX
 	glVertexPointerf(cells)
 
 	glEnableClientState(GL_COLOR_ARRAY)
-	colors = np.array([((phi/.1+1)/2).clip(0, 1), np.zeros(N), np.linspace(0, 1, num=N)]).transpose()[:, None, :].repeat(4, 1)
-	sys.exit = lambda:None # XXX
+	phi = ((phi/.1+1)/2).clip(0, 1)
+	solid_phi = ((solid_phi/.1+1)/2).clip(0, 1)
+	colors = np.array([phi, phi, solid_phi]).transpose()[:, None, :].repeat(4, 1)
 	glColorPointer(3, GL_FLOAT, 0, colors)
 	glDrawArrays(GL_QUADS, 0, len(cells))
 	glDisableClientState(GL_COLOR_ARRAY)
