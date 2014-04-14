@@ -180,10 +180,10 @@ if ((n) && !(n)->neighbour[(k)]){\
 						 Dql = py*sx-px*sy,
 						 Drl = D-Dpl-Dql;
 					if (D < 0 ? // check if D?l/D \in [0, 1] without division
-							0 <= Dpl && Dpl <= D &&
-							0 <= Dql && Dql <= D: // rl condition checks if s is too far, and should always be true
 							D <= Dpl && Dpl <= 0 &&
-							D <= Dql && Dql <= 0)
+							D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
+							0 <= Dpl && Dpl <= D &&
+							0 <= Dql && Dql <= D)
 						return (Dpl*pv+Dql*qv+Drl*v)/D;
 				}
 			}
@@ -199,7 +199,7 @@ if ((n) && !(n)->neighbour[(k)]){\
 			}
 #undef SET
 		}
-		assert(!"sample not implemented");
+		assert(false); // sample failed
 	}
 	void split(){
 		for (int i = 0; i < 4; ++i){
@@ -228,6 +228,11 @@ if ((n) && !(n)->neighbour[(k)]){\
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
 
+template<>
+void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
+	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << elt->solid_phi << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
+}
+
 int main(){
 	const double gx = 0, gy = -.05, T = 10;
 	quad *root = new quad(0, 0, 1);
@@ -240,11 +245,13 @@ int main(){
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
 		c->solid_phi = 1-hypot(c->x, c->y);
 		c->phi = max(-c->solid_phi, c->x+.25*c->y);
+		if (!(c->x+c->r >=1 && c->r >= 1e-1))
+			continue;
 		c->split();
-		if (c->x+c->r >=1 && c->r >= 1e-1)
-			for (int i = 0; i < 4; ++i)
-				a.push_back(c->child[i]);
+		for (int i = 0; i < 4; ++i)
+			a.push_back(c->child[i]);
 	}
+	rpc("draw_quad", a);
 
 	for (int t = 0; t < T; ++t){
 		// forces
@@ -275,12 +282,15 @@ int main(){
 		a.clear();
 		a.push_back(root);
 		for (int i = 0; i < a.size(); ++i)
-			if(a[i]->child[0])
+			if (a[i]->child[0])
 				for (int j = 0; j < 4; ++j)
 					a.push_back(a[i]->child[j]);
+		rpc("draw_quad", a);
 	}
 	return 0;
 }
+
+// old code
 
 template<typename T>
 int clamp(T x, int start, int stop){

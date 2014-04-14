@@ -11,6 +11,7 @@ import fcntl
 import termios
 import struct
 import itertools
+import operator
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
@@ -156,21 +157,50 @@ def draw(solid_phi, dx, dy, phi, bx, by):
 			np.array([np.zeros(dy.shape), dy]).reshape(2, dy.size)*(float(winsize)/h),
 		), axis=1)
 		vectors = np.rollaxis(np.array((pos, pos+vel)), -1)
-		glVertexPointerf(vectors)
 		glEnableClientState(GL_VERTEX_ARRAY)
+		glVertexPointerf(vectors)
 		glDrawArrays(GL_LINES, 0, 2*len(vectors))
 		glDisableClientState(GL_VERTEX_ARRAY)
 
 		glColor3f(1, 0, 0)
 		glColorMask(1, 1, 1, 1)
 		boundary = np.array([bx, by]).transpose()
-		glVertexPointerf(boundary)
 		glEnableClientState(GL_VERTEX_ARRAY)
+		glVertexPointerf(boundary)
 		glDrawArrays(GL_POINTS, 0, len(boundary))
 		glDisableClientState(GL_VERTEX_ARRAY)
 
 		glutSwapBuffers()
 	glPopMatrix()
+@opengl(winsize, winsize, frameskip=False)
+def draw_quad(cells):
+	vecs = {k : map(operator.itemgetter(k), cells) for k in cells[0]}
+	N = sum(vecs['leaf'])
+	vecs = {k : np.fromiter(itertools.compress(v, vecs['leaf']), np.float, N) for k, v in vecs.iteritems()}
+	del vecs['leaf']
+	_draw_quad_vecs(**vecs)
+def _draw_quad_vecs(solid_phi, phi, x, y, r):
+	N = len(r)
+
+	glColorMask(1, 1, 1, 1)
+	glClearColor(0., 0., 0., 0.)
+	glClear(GL_COLOR_BUFFER_BIT)
+
+	glEnableClientState(GL_COLOR_ARRAY)
+	glEnableClientState(GL_VERTEX_ARRAY)
+	colors = np.array([[0, 0, 1]]*N)
+	glColorPointer(3, GL_FLOAT, 0, colors)
+	lx = x-r
+	ly = y-r
+	hx = x+r
+	hy = y+r
+	cells = np.array([lx, ly, hx, ly, hx, hy, lx, hy]).transpose().reshape((4*N, 2))
+	glVertexPointerf(cells)
+	glDrawArrays(GL_QUADS, 0, N)
+	glDisableClientState(GL_VERTEX_ARRAY)
+	glDisableClientState(GL_COLOR_ARRAY)
+
+	glutSwapBuffers()
 def convert_param(param):
 	if isinstance(param, dict):
 		if isinstance(param.get('index'), list) and isinstance(param.get('value'), list):

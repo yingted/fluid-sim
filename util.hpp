@@ -18,8 +18,8 @@ template<typename E>
 std::ostream& operator<<(std::ostream& os, const std::vector<E>& vec){
 	char next = '[';
 	for (const E& e : vec){
-		_print_array_contents(os, next);
-		os << e;
+		_print_array_contents(os, (const char)next);
+		_print_array_contents(os, (const E)e);
 		next = ',';
 	}
 	if (next != ',') // eat trailing comma
@@ -35,12 +35,18 @@ std::ostream& operator<<(std::ostream& os, const SparseMatrix<E>& mat){
 void _print_array_contents(std::ostream& os){
 }
 
-template<typename E>
-void _print_array_contents(std::ostream& os, const E& elt){
-	os << elt;
+template<>
+void _print_array_contents<const char*>(std::ostream& os, const char *const& elt){
+	os << '"';
+	for (const char *ch = elt; *ch; ++ch){
+		if (*ch == '"' || *ch == '\\')
+			os << '\\';
+		os << *ch;
+	}
+	os << '"';
 }
 
-template<> // XXX allow char*
+template<>
 void _print_array_contents<std::string>(std::ostream& os, const std::string& elt){
 	os << '"';
 	for (char ch : elt){
@@ -49,6 +55,11 @@ void _print_array_contents<std::string>(std::ostream& os, const std::string& elt
 		os << ch;
 	}
 	os << '"';
+}
+
+template<typename E>
+void _print_array_contents(std::ostream& os, const E& elt){
+	os << elt;
 }
 
 template<typename E, typename... Args>
