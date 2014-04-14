@@ -19,7 +19,7 @@ struct quad{ // NULL is the infinite cell
 	quad *child[4]; // NE NW SW SE
 	const quad *parent;
 	const int index;
-	const double x, y, r;
+	const double r, x, y;
 	const static int cos[4], sin[4];
 	double u[4], solid_phi, phi;
 	void copy_from(const quad *o){
@@ -198,8 +198,50 @@ if ((n) && !(n)->neighbour[(k)]){\
 			assert(child[i]);
 		assert(!"merge not implemented");
 	}
+	double nx(int i)const{
+		assert(neighbour[i]);
+		return (neighbour[i]->x-x)/(neighbour[i]->r+r);
+	}
+	double ny(int i)const{
+		assert(neighbour[i]);
+		return (neighbour[i]->y-y)/(neighbour[i]->r+r);
+	}
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
+
+int main(){
+	const double gx = 0, gy = -.05, T = 10;
+	quad *root = new quad(0, 0, 1);
+	std::vector<quad*>a;
+	a.push_back(root);
+	for (int i = 0; i < a.size(); ++i){
+		quad* const c = a[i];
+		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
+		c->solid_phi = 1-hypot(c->x, c->y);
+		c->phi = max(-c->solid_phi, c->x+.25*c->y);
+		c->split();
+		if (c->x+c->r >=1 && c->r >= 1e-1)
+			for (int i = 0; i < 4; ++i)
+				a.push_back(c->child[i]);
+	}
+	for (int t = 0; t < T; ++t){
+		for (int i = 0; i < a.size(); ++i)
+			if (!a[i]->child[0])
+				for (int j = 0; j < 4; ++j){
+					quad* const p = a[i], * const q = p->neighbour[j];
+					if (q &&
+						!q->child[0] &&
+						(p->phi < 0 || q->phi < 0) &&
+						(p->r < q->r || p < q)){
+						const double flow = gx*p->nx(j)+gy*p->ny(j);
+						p->u[j] += flow;
+						assert(-flow == gx*q->nx(j)+gy*q->ny(j));
+						q->u[(j+2)%4] -= flow;
+					}
+				}
+	}
+	return 0;
+}
 
 #define BOUNDARY_NONE (0)
 #define BOUNDARY_VERTICAL (1)
@@ -479,41 +521,8 @@ void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rota
 		mask(a[i], mask_a[i], val);
 }
 
+#if 0
 int main(){
-	quad *root = new quad(0, 0, 1);
-	{
-		std::queue<quad*>q;
-		q.push(root);
-		while (!q.empty()){
-			quad* const c = q.front();
-			q.pop();
-			c->solid_phi = 1-hypot(c->x, c->y);
-			c->phi = max(-c->solid_phi, c->x+.25*c->y);
-			c->split();
-			if (c->r >= 1-c->x && c->r >= 1e-1)
-				for (int i = 0; i < 4; ++i)
-					q.push(c->child[i]);
-		}
-	}
-	return 0;
-}
-int old_main(){
-	const int N = 50, M = 50, T = 200, redistance_period = 1;
-	//const int N = 10, M = 10, T = 1, redistance_period = 1;
-	const double gx = 0, gy = -.05, mu = .1;
-	// coordinates: math-style
-	grid dx = make_grid<double>(N+1, M), dy = make_grid<double>(N, M+1), fx = dx, fy = dy;
-	grid phi = make_grid<double>(N, M), solid_phi = make_grid<double>(N+1, M+1);
-	for (int i = 0; i <= M; ++i)
-		for (int j = 0; j <= N; ++j)
-			solid_phi[i][j] = min(M, N)/2-hypot(i+.5-M/2, j+.5-N/2);
-	for (int i = 0; i < M; ++i)
-		for (int j = 0; j < N; ++j)
-			phi[i][j] = std::max<double>(-solid_phi[i][j],
-				//j-N/2
-				//j-N/2+.25*i
-				i-M/2
-			);
 	{
 		std::vector<double>bx, by;
 		interpolate_surface(phi, bx, by);
@@ -634,3 +643,4 @@ while(0)
 	}
 	return 0;
 } // vim: set ts=4 sw=4 noet:
+#endif
