@@ -81,12 +81,12 @@ struct quad{ // NULL is the infinite cell
 				           small = neighbour[i]->r-r;
 				for (int j = 0; j < 4; ++j){
 					for (int k = -1; k <= -1; k += 2)
-						if (neighbour[i]->x == cos[j]*big-sin[j]*small*k &&
-							neighbour[i]->y == sin[j]*big+cos[j]*small*k)
+						if (neighbour[i]->x == x+(cos[j]*big-sin[j]*small*k) &&
+							neighbour[i]->y == y+(sin[j]*big+cos[j]*small*k))
 							goto found;
-					assert(false); // not found
-found:;
 				}
+				assert(false); // not found
+found:;
 				assert(neighbour[i]->neighbour[(i+2)%4] == (neighbour[i]->r == r ? this : parent));
 			}
 		for (int i = 0; i < 4; ++i){
@@ -234,7 +234,7 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 10;
+	const double gx = 0, gy = -.05, T = 0;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
@@ -245,12 +245,14 @@ int main(){
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
 		c->solid_phi = 1-hypot(c->x, c->y);
 		c->phi = max(-c->solid_phi, c->x+.25*c->y);
-		if (!(c->x+c->r >=1 && c->r >= 1e-1))
+		//if (!(c->x+c->r >=1 && c->r >= 1e-1))
+		if (c->r < 1e-2)
 			continue;
 		c->split();
 		for (int i = 0; i < 4; ++i)
 			a.push_back(c->child[i]);
 	}
+	root->check_relations();
 	rpc("draw_quad", a);
 
 	for (int t = 0; t < T; ++t){
