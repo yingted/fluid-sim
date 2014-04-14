@@ -202,7 +202,7 @@ if ((n) && !(n)->neighbour[(k)]){\
 		}
 		assert(false); // sample failed
 	}
-	void split(std::function<void(quad*)>cb){
+	void split(std::function<void(quad*)>cb=NULL){
 		for (int i = 0; i < 4; ++i)
 			if (neighbour[i] && neighbour[i]->r > r)
 				neighbour[i]->split(cb);
@@ -210,7 +210,8 @@ if ((n) && !(n)->neighbour[(k)]){\
 			assert(!neighbour[i] || neighbour[i]->r == r);
 		for (int i = 0; i < 4; ++i){
 			assert(!child[i]);
-			cb(child[i] = new quad(this, i));
+			if (cb)
+				cb(child[i] = new quad(this, i));
 		}
 	}
 	void merge(){
@@ -264,7 +265,7 @@ int main(){
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
 				for (int j = 0; j < 4; ++j){
-					quad* const p = a[i], * const q = p->neighbour[j];
+					quad *const p = a[i], *const q = p->neighbour[j];
 					if (q &&
 						!q->child[0] &&
 						(p->phi < 0 || q->phi < 0) &&
