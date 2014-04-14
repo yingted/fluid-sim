@@ -104,11 +104,14 @@ found:;
 			return this;
 		for (int i = 0; i < 4; ++i)
 			if (child[i]->contains(px, py))
-				return child[i];
+				return child[i]->query(px, py);
 		assert(false);
 	}
 	quad *query(double px, double py){
 		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
+	}
+	double query_sample(double sx, double sy, size_t offset)const{
+		return query(sx, sy)->sample(sx, sy, offset);
 	}
 	double sample(double sx, double sy, size_t offset)const{
 		assert(!child[0]);
@@ -227,6 +230,8 @@ int main(){
 	const double gx = 0, gy = -.05, T = 10;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
+	std::vector<double>phi;
+
 	a.push_back(root);
 	for (int i = 0; i < a.size(); ++i){
 		quad* const c = a[i];
@@ -238,7 +243,9 @@ int main(){
 			for (int i = 0; i < 4; ++i)
 				a.push_back(c->child[i]);
 	}
+
 	for (int t = 0; t < T; ++t){
+		// forces
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
 				for (int j = 0; j < 4; ++j){
@@ -252,24 +259,25 @@ int main(){
 						q->u[(j+2)%4] -= flow;
 					}
 				}
+
+		phi.clear();
+		phi.resize(a.size());
+		static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
+		for (int i = 0; i < a.size(); ++i)
+			if (!a[i]->child[0])
+				phi[i] = root->query_sample(a[i]->x, a[i]->y, offsetof(quad, phi));
+		for (int i = 0; i < a.size(); ++i)
+			if (!a[i]->child[0])
+				a[i]->phi = phi[i];
+
+		a.clear();
+		a.push_back(root);
+		for (int i = 0; i < a.size(); ++i)
+			if(a[i]->child[0])
+				for (int j = 0; j < 4; ++j)
+					a.push_back(a[i]->child[j]);
 	}
 	return 0;
-}
-
-#define BOUNDARY_NONE (0)
-#define BOUNDARY_VERTICAL (1)
-#define BOUNDARY_HORIZONTAL (2)
-#define BOUNDARY_BORDER (BOUNDARY_VERTICAL|BOUNDARY_HORIZONTAL)
-
-void set_boundary(grid& a, double val, int type){
-	assert(!a.empty() && !a[0].empty());
-	if (type & BOUNDARY_HORIZONTAL)
-		for (int i = 0; i < a.size(); ++i)
-			a[i][0] = a[i].back() = val; // y = 0
-	if (type & BOUNDARY_VERTICAL){
-		fill(a[0]    .begin(), a[0]    .end(), val); // x = 0
-		fill(a.back().begin(), a.back().end(), val);
-	}
 }
 
 template<typename T>
@@ -291,7 +299,6 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 	for (int i = 0; i < a0.size(); ++i)
 		for (int j = 0; j < a0[i].size(); ++j)
 			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
-	set_boundary(a, 0, type);
 	return std::move(a);
 }
 
@@ -378,8 +385,6 @@ void redistance(grid& phi, const std::vector<double>& bx, const std::vector<doub
 }
 
 void project(const grid& solid_phi, grid& dx, grid& dy, const grid& phi){
-	set_boundary(dx, 0, BOUNDARY_VERTICAL);
-	set_boundary(dy, 0, BOUNDARY_HORIZONTAL);
 
 #define THETA_X(i2,j2) (1-phi_theta(solid_phi[(i2)][(j2)], solid_phi[(i2)][(j2)+1]))
 #define THETA_Y(i2,j2) (1-phi_theta(solid_phi[(i2)][(j2)], solid_phi[(i2)+1][(j2)]))
