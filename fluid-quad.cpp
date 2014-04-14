@@ -231,6 +231,28 @@ if ((n) && !(n)->neighbour[(k)]){\
 		assert(neighbour[i]);
 		return phi_theta(phi, neighbour[i]->phi);
 	}
+	void visit_cells(std::function<void(quad*)>cb){
+		assert(this);
+		assert(cb);
+		if (child[0])
+			for (int i = 0; i < 4; ++i)
+				child[i]->visit_cells(cb);
+		else
+			cb(this);
+	}
+	void visit_faces(std::function<void(quad*, int)>cb){
+		assert(this);
+		assert(cb);
+		visit_cells([cb](quad *p){
+			for (int j = 0; j < 4; ++j){
+				quad *const q = p->neighbour[j];
+				if (q &&
+					!q->child[0] &&
+					(p->r < q->r || p < q))
+					cb(p, j);
+			}
+		});
+	}
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
 
@@ -240,7 +262,7 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 0;
+	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
@@ -262,19 +284,14 @@ int main(){
 
 	for (int t = 0; t < T; ++t){
 		// forces
-		for (int i = 0; i < a.size(); ++i)
-			if (!a[i]->child[0])
-				for (int j = 0; j < 4; ++j){
-					quad *const p = a[i], *const q = p->neighbour[j];
-					if (q &&
-						!q->child[0] &&
-						(p->phi < 0 || q->phi < 0) &&
-						(p->r < q->r || p < q)){
-						const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
-						p->u[j] += flow;
-						q->u[(j+2)%4] -= flow;
-					}
-				}
+		root->visit_faces([gx, gy](quad *const p, int j){
+			quad *const q = p->neighbour[j];
+			if (p->phi < 0 || q->phi < 0){
+				const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
+				p->u[j] += flow;
+				q->u[(j+2)%4] -= flow;
+			}
+		});
 
 		phi.clear();
 		phi.resize(a.size());
