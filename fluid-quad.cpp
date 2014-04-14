@@ -14,6 +14,16 @@
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
 
+double phi_theta(double a, double b){
+	return a < 0 ?
+		b < 0 ?
+			1 :
+			a/(a-b) :
+		b < 0 ?
+			b/(b-a) :
+			0;
+}
+
 struct quad{ // NULL is the infinite cell
 	quad *neighbour[4]; // right up left down
 	quad *child[4]; // NE NW SW SE
@@ -198,13 +208,17 @@ if ((n) && !(n)->neighbour[(k)]){\
 			assert(child[i]);
 		assert(!"merge not implemented");
 	}
-	double nx(int i)const{
+	double nx(int i)const{ // not dividing by radius sum
 		assert(neighbour[i]);
-		return (neighbour[i]->x-x)/(neighbour[i]->r+r);
+		return 2*(neighbour[i]->x-x);
 	}
 	double ny(int i)const{
 		assert(neighbour[i]);
-		return (neighbour[i]->y-y)/(neighbour[i]->r+r);
+		return 2*(neighbour[i]->y-y);
+	}
+	double theta(int i)const{
+		assert(neighbour[i]);
+		return phi_theta(phi, neighbour[i]->phi);
 	}
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
@@ -233,9 +247,8 @@ int main(){
 						!q->child[0] &&
 						(p->phi < 0 || q->phi < 0) &&
 						(p->r < q->r || p < q)){
-						const double flow = gx*p->nx(j)+gy*p->ny(j);
+						const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
 						p->u[j] += flow;
-						assert(-flow == gx*q->nx(j)+gy*q->ny(j));
 						q->u[(j+2)%4] -= flow;
 					}
 				}
@@ -280,16 +293,6 @@ grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double
 			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
 	set_boundary(a, 0, type);
 	return std::move(a);
-}
-
-double phi_theta(double a, double b){
-	return a < 0 ?
-		b < 0 ?
-			1 :
-			a/(a-b) :
-		b < 0 ?
-			b/(b-a) :
-			0;
 }
 
 #define THETA(i2,j2) (std::max(1e-2, phi_theta(phi[i][j], phi[(i2)][(j2)])))
@@ -531,20 +534,6 @@ int main(){
 	//for (int j = 1; j < M/2; ++j)
 	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
-		// add forces
-		{
-			dx += fx;
-			dy += fy;
-			for (int i = 1; i+1 < dx.size(); ++i)
-				for (int j = 0; j < dx[0].size(); ++j)
-					if (phi[i-1][j] < 0 || phi[i][j] < 0) // ignore theta = epsilon
-						dx[i][j] += gx*THETA(i-1, j); // flow in
-			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 1; j+1 < dy[0].size(); ++j)
-					if (phi[i][j-1] < 0 || phi[i][j] < 0) // ignore theta = epsilon
-						dy[i][j] += gy*THETA(i, j-1); // flow in
-		}
-
 		// velocity boundary conditions
 		{
 			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
