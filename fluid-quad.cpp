@@ -141,17 +141,18 @@ if ((n) && !(n)->neighbour[(k)]){\
 }
 			IF_TRY_GHOST(q, this, j)
 			else{
-				const quad *n = n->child[0] ? n->child[(j+1+i%2)%4] : n;
-				SET(q, n);
+				const quad *const m = n->child[0] ? n->child[(j+1+i%2)%4] : n;
+				SET(q, m);
 			}
 			if (i){
-				const quad *pred = n->neighbour[(j+3)%4];
 				if (r != qr)
 					rr = 0;
-				if (!rr && r == pr)
+				if (!rr && r == pr && n){
+					const quad *const pred = n->neighbour[(j+3)%4];
 					if (pred && pred->r == n->r)
 						SET(r, pred);
 					else IF_TRY_GHOST(r, n, (j+3)%4);
+				}
 				if (rr){ // 0, p, r, q
 					double lx, ly;
 					if (!px || !qx){
@@ -189,12 +190,13 @@ if ((n) && !(n)->neighbour[(k)]){\
 			px = qx;
 			py = qy;
 			pv = qv;
-			const quad *succ = n->neighbour[(j+1)%4];
-			if (succ && succ->r == n->r)
-				SET(r, succ);
-			else IF_TRY_GHOST(r, n, (j+1)%4)
-			else 
-				rr = 0;
+			rr = 0;
+			if (n){
+				const quad *const succ = n->neighbour[(j+1)%4];
+				if (succ && succ->r == n->r)
+					SET(r, succ);
+				else IF_TRY_GHOST(r, n, (j+1)%4);
+			}
 #undef SET
 		}
 		assert(!"sample not implemented");
