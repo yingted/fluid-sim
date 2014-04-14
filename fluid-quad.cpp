@@ -111,6 +111,51 @@ found:;
 	quad *query(double px, double py){
 		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
 	}
+	double dist(double px, double py)const{
+		return hypot(px-x, py-y);
+	}
+	double dist2(double px, double py)const{
+		return (px-x)*(px-x)+(py-y)*(py-y);
+	}
+	double power(double px, double py)const{
+		return dist2(px, py)-2*r*r;
+	}
+	const quad *query_nn(double px, double py)const{
+		assert(contains(px, py));
+		if (child[0])
+			return query(px, py)->query_nn(px, py);
+		double best = dist2(px, py);
+		const quad * ret = this;
+		for (int i = 0; i < 4; ++i){
+			const quad *const n = neighbour[i];
+			if (n){
+				const double d2 = n->dist2(px, py);
+				if (d2 < best){
+					best = d2;
+					ret = n;
+				}
+			}
+		}
+		return ret;
+	}
+	const quad *query_power(double px, double py)const{
+		assert(contains(px, py));
+		if (child[0])
+			return query(px, py)->query_power(px, py);
+		double best = power(px, py);
+		const quad * ret = this;
+		for (int i = 0; i < 4; ++i){
+			const quad *const n = neighbour[i];
+			if (n && !n->child[0]){
+				const double d2 = n->power(px, py);
+				if (d2 < best){
+					best = d2;
+					ret = n;
+				}
+			}
+		}
+		return ret;
+	}
 	double query_sample(double sx, double sy, size_t offset)const{
 		return query(sx, sy)->sample(sx, sy, offset);
 	}
@@ -221,15 +266,33 @@ if ((n) && !(n)->neighbour[(k)]){\
 	}
 	double nx(int i)const{ // not dividing by radius sum
 		assert(neighbour[i]);
-		return 2*(neighbour[i]->x-x);
+		assert(!neighbour[i]->child[0]);
+		return (neighbour[i]->x-x)/(neighbour[i]->r > r ? 1.5 : 1);
 	}
 	double ny(int i)const{
 		assert(neighbour[i]);
-		return 2*(neighbour[i]->y-y);
+		assert(!neighbour[i]->child[0]);
+		return (neighbour[i]->y-y)/(neighbour[i]->r > r ? 1.5 : 1);
+	}
+	double n(int i)const{
+		assert(neighbour[i]);
+		return hypot(nx(i), ny(i));
 	}
 	double theta(int i)const{
 		assert(neighbour[i]);
 		return phi_theta(phi, neighbour[i]->phi);
+	}
+	double div(){
+		double ret = 0;
+		for (int i = 0; i < 4; ++i)
+			if (!neighbour[i])
+				continue;
+			else if(!neighbour[i]->child[0])
+				ret += n(i);
+			else
+				ret -= neighbour[i]->child[(i+1)%4]->n((i+2)%4)
+					+  neighbour[i]->child[(i+2)%4]->n((i+2)%4);
+		return ret;
 	}
 	void visit_cells(std::function<void(quad*)>cb){
 		assert(this);
@@ -269,7 +332,7 @@ int main(){
 
 	a.push_back(root);
 	for (int i = 0; i < a.size(); ++i){
-		quad* const c = a[i];
+		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
 		c->solid_phi = 1-hypot(c->x, c->y);
 		c->phi = max(-c->solid_phi, c->x+.25*c->y);
@@ -293,12 +356,14 @@ int main(){
 			}
 		});
 
+		// TODO pressure solve
+
 		phi.clear();
 		phi.resize(a.size());
 		static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
-				phi[i] = root->query_sample(a[i]->x, a[i]->y, offsetof(quad, phi));
+				phi[i] = root->query_sample(a[i]->x, a[i]->y, offsetof(quad, phi)); // TODO consider velocity
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
 				a[i]->phi = phi[i];
@@ -567,13 +632,6 @@ void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rota
 
 #if 0
 int main(){
-	{
-		std::vector<double>bx, by;
-		interpolate_surface(phi, bx, by);
-		rpc("draw", solid_phi, dx, dy, phi, bx, by);
-	}
-	//for (int j = 1; j < M/2; ++j)
-	//	fx[3][j] = .2; // wind on the left
 	for (int t = 0; t < T; ++t){
 		// velocity boundary conditions
 		{
