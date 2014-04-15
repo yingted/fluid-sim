@@ -169,46 +169,43 @@ found:;
 		sy = max(-r, min(r, sy-y));
 		static double ret = nan("not found");
 		const bool failed = (const_cast<quad*>(this))->visit_my_vertices([sx, sy, offset](quad *c, quad *p, quad *pq, quad *q){
-			if (!pq || c->r != p->r){
-				double D = p->y*q->x-p->x*q->y, // determinant
-					 Dpl = q->x*sy-q->y*sx,
-					 Dql = p->y*sx-p->x*sy,
-					 Drl = D-Dpl-Dql;
-				if (D < 0 ? // check if D?l/D \in [0, 1] without division
-						D <= Dpl && Dpl <= 0 &&
-						D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
-						0 <= Dpl && Dpl <= D &&
-						0 <= Dql && Dql <= D){
-					ret = (Dpl*p->field(offset)+Dql*q->field(offset)+Drl*c->field(offset))/D;
-					return false;
-				}
-				return true;
-			}
-			double lx, ly;
+			double lx = -1, ly = -1;
+			if (!pq)
+				goto barycentric;
 			if (!p->x || !q->x){
 				lx = sx/pq->x;
+				const quad *const t = p->x ? p : q;
 				if (0 <= lx && lx <= 1)
-					if (!p->x)
-						ly = (sy-lx*(c->r-q->r))/(2*(c->r-lx*(c->r-q->r)));
-					else
-						ly = (sy-lx*(c->r-p->r))/(2*(c->r-lx*(c->r-p->r)));
-			}else{
-				assert(!p->y || !q->y);
+					ly = (sy-lx*(c->r-t->r))/(2*(c->r-lx*(c->r-t->r)));
+			}else if(!p->y || !q->y){
 				ly = sy/pq->y;
+				const quad *const t = p->y ? p : q;
 				if (0 <= ly && ly <= 1)
-					if (!p->y)
-						lx = (sx-ly*(c->r-q->r))/(2*(c->r-ly*(c->r-q->r)));
-					else
-						lx = (sx-ly*(c->r-p->r))/(2*(c->r-ly*(c->r-p->r)));
-			}
+					lx = (sx-ly*(c->r-t->r))/(2*(c->r-ly*(c->r-t->r)));
+			}else
+				goto barycentric;
 			if (0 <= lx && lx <= 1 &&
 				0 <= ly && ly <= 1){
 				ret = lx*(1-ly)*p->field(offset)+lx*ly*q->field(offset)+(1-lx)*ly*pq->field(offset)+(1-lx)*(1-ly)*c->field(offset);
 				return false;
 			}
 			return true;
+barycentric:
+			double D = p->y*q->x-p->x*q->y, // determinant
+				 Dpl = q->x*sy-q->y*sx,
+				 Dql = p->y*sx-p->x*sy,
+				 Drl = D-Dpl-Dql;
+			if (D < 0 ? // check if D?l/D \in [0, 1] without division
+					D <= Dpl && Dpl <= 0 &&
+					D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
+					0 <= Dpl && Dpl <= D &&
+					0 <= Dql && Dql <= D){
+				ret = (Dpl*p->field(offset)+Dql*q->field(offset)+Drl*c->field(offset))/D;
+				return false;
+			}
+			return true;
 		});
-		assert(failed);
+		assert(!failed);
 		return ret;
 	}
 	void split(std::function<void(quad*)>cb=NULL){
