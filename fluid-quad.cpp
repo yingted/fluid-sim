@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstddef>
+#include <cstring>
 #include <algorithm>
 #include <queue>
 #include "util.hpp"
@@ -159,7 +160,7 @@ found:;
 	double query_sample(double sx, double sy, size_t offset)const{
 		return query(sx, sy)->sample(sx, sy, offset);
 	}
-	double sample(double sx, double sy, size_t offset)const{
+	double sample_old(double sx, double sy, size_t offset)const{
 		assert(!child[0]);
 		sx = max(-r, min(r, sx-x));
 		sy = max(-r, min(r, sy-y));
@@ -243,9 +244,61 @@ if ((n) && !(n)->neighbour[(k)]){\
 					SET(r, succ);
 				else IF_TRY_GHOST(r, n, (j+1)%4);
 			}
+#undef IF_TRY_GHOST
 #undef SET
 		}
 		assert(false); // sample failed
+	}
+	double field(size_t offset)const{
+		return *(double*)(((char*)(this))+offset);
+	}
+	double sample(double sx, double sy, size_t offset)const{
+		assert(!child[0]);
+		sx = max(-r, min(r, sx-x));
+		sy = max(-r, min(r, sy-y));
+		static double ret = nan("not found");
+		const bool failed = (const_cast<quad*>(this))->visit_my_vertices([sx, sy, offset](quad *c, quad *p, quad *pq, quad *q){
+			if (!pq || c->r != p->r){
+				double D = p->y*q->x-p->x*q->y, // determinant
+					 Dpl = q->x*sy-q->y*sx,
+					 Dql = p->y*sx-p->x*sy,
+					 Drl = D-Dpl-Dql;
+				if (D < 0 ? // check if D?l/D \in [0, 1] without division
+						D <= Dpl && Dpl <= 0 &&
+						D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
+						0 <= Dpl && Dpl <= D &&
+						0 <= Dql && Dql <= D){
+					ret = (Dpl*p->field(offset)+Dql*q->field(offset)+Drl*c->field(offset))/D;
+					return false;
+				}
+				return true;
+			}
+			double lx, ly;
+			if (!p->x || !q->x){
+				lx = sx/pq->x;
+				if (0 <= lx && lx <= 1)
+					if (!p->x)
+						ly = (sy-lx*(c->r-q->r))/(2*(c->r-lx*(c->r-q->r)));
+					else
+						ly = (sy-lx*(c->r-p->r))/(2*(c->r-lx*(c->r-p->r)));
+			}else{
+				assert(!p->y || !q->y);
+				ly = sy/pq->y;
+				if (0 <= ly && ly <= 1)
+					if (!p->y)
+						lx = (sx-ly*(c->r-q->r))/(2*(c->r-ly*(c->r-q->r)));
+					else
+						lx = (sx-ly*(c->r-p->r))/(2*(c->r-ly*(c->r-p->r)));
+			}
+			if (0 <= lx && lx <= 1 &&
+				0 <= ly && ly <= 1){
+				ret = lx*(1-ly)*p->field(offset)+lx*ly*q->field(offset)+(1-lx)*ly*pq->field(offset)+(1-lx)*(1-ly)*c->field(offset);
+				return false;
+			}
+			return true;
+		});
+		assert(failed);
+		return ret;
 	}
 	void split(std::function<void(quad*)>cb=NULL){
 		for (int i = 0; i < 4; ++i)
@@ -294,27 +347,77 @@ if ((n) && !(n)->neighbour[(k)]){\
 					+  neighbour[i]->child[(i+2)%4]->n((i+2)%4);
 		return ret;
 	}
-	void visit_cells(std::function<void(quad*)>cb){
+	bool visit_cells(std::function<bool(quad*)>cb){
 		assert(this);
 		assert(cb);
 		if (child[0])
 			for (int i = 0; i < 4; ++i)
-				child[i]->visit_cells(cb);
+				if (!child[i]->visit_cells(cb))
+					return false;
 		else
-			cb(this);
+			return cb(this);
+		return true;
 	}
-	void visit_faces(std::function<void(quad*, int)>cb){
+	bool visit_faces(std::function<bool(quad*, int)>cb){
 		assert(this);
 		assert(cb);
-		visit_cells([cb](quad *p){
+		return visit_cells([cb](quad *p){
 			for (int j = 0; j < 4; ++j){
 				quad *const q = p->neighbour[j];
 				if (q &&
 					!q->child[0] &&
-					(p->r < q->r || p < q))
-					cb(p, j);
+					(p->r < q->r || p < q) &&
+					!cb(p, j))
+					return false;
 			}
 		});
+	}
+	bool visit_my_vertices(std::function<bool(quad*, quad*, quad*, quad*)>cb){
+		assert(!child[0]);
+		char *ghost_buf[2*sizeof(quad)];
+		memset(ghost_buf, 0, sizeof(ghost_buf));
+		quad *ghost = (quad*)ghost_buf;
+		int nr_ghost = 0;
+		quad *p = NULL, *q = NULL, *pq = NULL;
+		for (int i = 0; i < 9; ++i){
+			const int j = i/2%4;
+			quad *const n = neighbour[j];
+			if (!(n && n->child[0]))
+				++i;
+#define IF_TRY_GHOST(q,n,k) \
+if (!(n) || !(n)->neighbour[(k)]){\
+	const double macro_gr = (n) ? (n)->r : r; \
+	new(&ghost[nr_ghost]) quad(2*macro_gr*cos[(k)], 2*macro_gr*sin[(k)], macro_gr);\
+	(q) = &ghost[nr_ghost];\
+	nr_ghost = (nr_ghost+1)%(sizeof(ghost_buf)/sizeof(ghost[0]));\
+}
+			IF_TRY_GHOST(q, this, j)
+			else
+				q = n->child[0] ? n->child[(j+1+i%2)%4] : n;
+			assert(q);
+			if (p){
+				if (r != q->r)
+					pq = NULL;
+				if (!pq){
+					quad *const pred = n ? n->neighbour[(j+3)%4] : NULL;
+					if (pred && pred->r == n->r)
+						pq = pred;
+					else IF_TRY_GHOST(pq, n, (j+3)%4);
+				}
+				if (!cb(this, p, pq, q))
+					return false;
+			}
+			p = q;
+			pq = NULL;
+			if (n){
+				quad *const succ = n->neighbour[(j+1)%4];
+				if (succ && succ->r == n->r)
+					pq = succ;
+				else IF_TRY_GHOST(pq, n, (j+1)%4);
+			}
+#undef IF_TRY_GHOST
+		}
+		return true;
 	}
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
@@ -354,6 +457,7 @@ int main(){
 				p->u[j] += flow;
 				q->u[(j+2)%4] -= flow;
 			}
+			return true;
 		});
 
 		// TODO pressure solve

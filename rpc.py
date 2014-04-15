@@ -174,6 +174,7 @@ def draw(solid_phi, dx, dy, phi, bx, by):
 	glPopMatrix()
 @opengl(winsize, winsize, frameskip=False)
 def draw_quad(cells):
+	sys.exit = lambda: None
 	vecs = {k : map(operator.itemgetter(k), cells) for k in cells[0]}
 	N = sum(vecs['leaf'])
 	vecs = {k : np.fromiter(itertools.compress(v, vecs['leaf']), np.float, N) for k, v in vecs.iteritems()}
