@@ -39,6 +39,14 @@ struct quad{ // NULL is the infinite cell
 		for (int i = 0; i < 4; ++i)
 			u[i] = o->u[i];
 	}
+	quad ghost_cell(){
+		quad ret(NULL, -1);
+		ret.solid_phi = -solid_phi;
+		ret.phi = phi;
+		for (int i = 0; i < 4; ++i)
+			ret.u[i] = u[i];
+		return ret;
+	}
 	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
 	quad(quad *parent, int index) : parent(parent), index(index), neighbour(), child(),
 		r(.5*parent->r),
@@ -160,7 +168,7 @@ found:;
 	double query_sample(double sx, double sy, size_t offset)const{
 		return query(sx, sy)->sample(sx, sy, offset);
 	}
-	double field(size_t offset)const{
+	double& field(size_t offset){
 		return *(double*)(((char*)(this))+offset);
 	}
 	double sample(double sx, double sy, size_t offset)const{
@@ -285,6 +293,7 @@ barycentric:
 		char *ghost_buf[2*sizeof(quad)];
 		memset(ghost_buf, 0, sizeof(ghost_buf));
 		quad *ghost = (quad*)ghost_buf;
+		const quad ghost_values = ghost_cell();
 		int nr_ghost = 0;
 		quad *p = NULL, *q = NULL, *pq = NULL;
 		for (int i = 0; i < 9; ++i){
@@ -296,6 +305,7 @@ barycentric:
 if (!(n) || !(n)->neighbour[(k)]){\
 	const double macro_gr = (n) ? (n)->r : r; \
 	new(&ghost[nr_ghost]) quad(2*macro_gr*cos[(k)], 2*macro_gr*sin[(k)], macro_gr);\
+	ghost[nr_ghost].copy_from(&ghost_values);\
 	(q) = &ghost[nr_ghost];\
 	nr_ghost = (nr_ghost+1)%(sizeof(ghost_buf)/sizeof(ghost[0]));\
 }
