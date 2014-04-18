@@ -11,6 +11,7 @@
 #include <cstring>
 #include <algorithm>
 #include <queue>
+#include <map>
 #include "util.hpp"
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
@@ -32,7 +33,7 @@ struct quad{ // NULL is the infinite cell
 	const int index;
 	const double r, x, y;
 	const static int cos[4], sin[4];
-	double u[4], solid_phi, phi;
+	double u[4], solid_phi, phi, dx[8], dy[8], cell_dx, cell_dy;
 	void copy_from(const quad *o){
 		solid_phi = o->solid_phi;
 		phi = o->phi;
@@ -134,14 +135,21 @@ found:;
 		if (child[0])
 			return query(px, py)->query_nn(px, py);
 		double best = dist2(px, py);
-		const quad * ret = this;
+		const quad *ret = this;
+		auto test = [&best, &ret, px, py](const quad *const n){
+			const double d2 = n->dist2(px, py);
+			if (d2 < best){
+				best = d2;
+				ret = n;
+			}
+		};
 		for (int i = 0; i < 4; ++i){
 			const quad *const n = neighbour[i];
 			if (n){
-				const double d2 = n->dist2(px, py);
-				if (d2 < best){
-					best = d2;
-					ret = n;
+				test(n);
+				if (n->child[0]){
+					test(n->child[(i+1)%4]);
+					test(n->child[(i+2)%4]);
 				}
 			}
 		}
@@ -266,11 +274,11 @@ barycentric:
 	bool visit_cells(std::function<bool(quad*)>cb){
 		assert(this);
 		assert(cb);
-		if (child[0])
+		if (child[0]){
 			for (int i = 0; i < 4; ++i)
 				if (!child[i]->visit_cells(cb))
 					return false;
-		else
+		}else
 			return cb(this);
 		return true;
 	}
@@ -378,7 +386,41 @@ int main(){
 			return true;
 		});
 
-		// TODO pressure solve
+		{
+			std::map<std::pair<const quad*, const quad*>, double>dx_n, dx_d, dy_n, dy_d;
+			root->visit_faces([&](const quad *const p, const int j){
+				quad *const q = p->neighbour[j];
+				const std::pair<const quad*, const quad*> pq = std::make_pair(p, q), qp = std::make_pair(q, p);
+				const static double epsilon = .03;
+				double u = p->u[j], nx = p->nx(j), ny = p->ny(j), n = hypot(nx, ny), w_inv = nx*nx+ny*ny+epsilon*epsilon; // n**2+epsilon**2
+				nx /= n*w_inv;
+				ny /= n*w_inv;
+#define FLOW(a, q) do{\
+	a[(pq)] += (q);\
+	a[(qp)] -= (q);\
+	}while(0)
+				FLOW(dx_n, nx*u);
+				FLOW(dx_d, nx);
+				FLOW(dy_n, ny*u);
+				FLOW(dy_d, ny);
+#undef FLOW
+				return true;
+			});
+			root->visit_cells([&](quad *const n){
+				double cell_dx_n = 0, cell_dy_n = 0;
+				int i = 0;
+				const bool success = n->visit_my_vertices([&](quad *p, quad *q, quad *r, quad *s){
+					const std::pair<const quad*, const quad*> pq = std::make_pair(p, q);
+					cell_dx_n += p->dx[i  ] = dx_n[pq]/dx_d[pq];
+					cell_dy_n += p->dy[i++] = dy_n[pq]/dy_d[pq];
+					return true;
+				});
+				assert(success);
+				n->cell_dx = cell_dx_n/i;
+				n->cell_dy = cell_dy_n/i;
+				return true;
+			});
+		} // TODO pressure solve
 
 		phi.clear();
 		phi.resize(a.size());
