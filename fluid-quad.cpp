@@ -416,7 +416,7 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 
 int main(){
 	//const double gx = 0, gy = -.05, T = 50;
-	const double gx = 0, gy = -.2, T = 50;
+	const double gx = 0, gy = -.05, T = 10;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
@@ -472,15 +472,15 @@ int main(){
 					divisor = w_inv*w_inv;
 				nx /= n;
 				ny /= n;
-#define FLOW(a,q,r) do{\
+#define FLOW(a,q) do{\
 	(a)[pq] += (q);\
-	(a)[qp] += (r)*(q);\
+	(a)[qp] += (q);\
 }while(0)
-				FLOW(unx, u*nx/divisor, -1); // cell x cell => edge
-				FLOW(uny, u*ny/divisor, -1);
-				FLOW(nxny, nx*ny/divisor, 1);
-				FLOW(nx2, nx*nx/divisor, 1);
-				FLOW(ny2, ny*ny/divisor, 1);
+				FLOW(unx, u*nx/divisor); // cell x cell => edge
+				FLOW(uny, u*ny/divisor); // don't premultiply
+				FLOW(nxny, nx*ny/divisor);
+				FLOW(nx2, nx*nx/divisor);
+				FLOW(ny2, ny*ny/divisor);
 #undef FLOW
 				return true;
 			});
@@ -511,7 +511,7 @@ int main(){
 						p->dy[i] = (my_nxny*my_unx-my_nx2*my_uny)/det;
 					}else if(my_nx2 || my_nxny || my_ny2){ // always true
 						double A, B, C; // (A, B, C) = (nx2, nxny, unx)+(nxny, ny2, uny)
-						if (my_nxny < 0 && my_nx2){ // can cancel in A, so first-second
+						if (my_nxny < 0 && my_ny2){ // can cancel in A, so first-second
 							A = my_nx2-my_nxny; // XXX check if this is the regularized solution
 							B = my_nxny-my_ny2;
 							C = my_unx-my_uny;
@@ -548,23 +548,12 @@ int main(){
 		phi.clear();
 		phi.resize(a.size());
 		static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
-double den = 0, num = 0;
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0]){
 				double dx, dy;
 				root->query_sample_u(a[i]->x, a[i]->y, dx, dy);
-//std::cerr << dx << ", " << dy << " == " << a[i]->cell_dx << ", " << a[i]->cell_dy << std::endl;
-assert(fabs(dx-a[i]->cell_dx) < 1e-6);
-assert(fabs(dy-a[i]->cell_dy) < 1e-6);
-den += a[i]->r*a[i]->r*4;
-if (!dx && !dy)
-	num += a[i]->r*a[i]->r*4;
-//std::cerr << "dx = " << dx << ", dy = " << dy << std::endl;
-				phi[i] = root->query_sample(a[i]->x-dx, a[i]->y-dy, offsetof(quad, phi)); // TODO consider velocity
-//if (-.5 <= a[i]->x && a[i]->x <= .5 && -.75 <= a[i]->y && a[i]->y <= -.25)
-//	std::cerr << "phi: " << a[i]->phi << " => " << phi[i] << std::endl;
+				phi[i] = root->query_sample(a[i]->x-dx, a[i]->y-dy, offsetof(quad, phi));
 			}
-std::cerr << "zero velocity: " << num << "/" << den << std::endl;
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
 				a[i]->phi = phi[i];

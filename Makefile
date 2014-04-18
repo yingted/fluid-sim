@@ -27,6 +27,8 @@ fluid-grid-play: fluid-grid-0001.ppm
 	ffplay $(FFMPEG_FLAGS) -vf scale=-1:500 fluid-grid-%04d.ppm
 fluid-grid-gl.mkv: fluid-grid.trace apitrace
 	apitrace/build/glretrace -s - $< | ffmpeg -f image2pipe -vcodec ppm -i pipe: $(FFMPEG_CONVERT) $@
+fluid-quad-gl.mkv: fluid-quad.trace apitrace
+	apitrace/build/glretrace -s - $< | ffmpeg -f image2pipe -vcodec ppm -i pipe: $(FFMPEG_CONVERT) $@
 %.mkv: %-0001.ppm
 	ffmpeg $(FFMPEG_FLAGS) -i $(patsubst %.mkv,%-%04d.ppm,$@) $(FFMPEG_CONVERT) $@
 apitrace:
