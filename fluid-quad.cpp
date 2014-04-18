@@ -26,6 +26,19 @@ double phi_theta(double a, double b){
 			0;
 }
 
+bool barycentric(double px, double py, double qx, double qy, double sx, double sy,
+	double& D, double& Dpl, double& Dql, double& Drl){ // of sx wrt (r = 0), p, q
+	D   = py*qx-px*qy; // determinant
+	Dpl = qx*sy-qy*sx;
+	Dql = py*sx-px*sy;
+	Drl = D-Dpl-Dql;
+	return D < 0 ? // check if D?l/D \in [0, 1] without division
+		D <= Dpl && Dpl <= 0 &&
+		D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
+		0 <= Dpl && Dpl <= D &&
+		0 <= Dql && Dql <= D;
+}
+
 struct quad{ // NULL is the infinite cell
 	quad *neighbour[4]; // right up left down
 	quad *child[4]; // NE NW SW SE
@@ -39,13 +52,25 @@ struct quad{ // NULL is the infinite cell
 		phi = o->phi;
 		for (int i = 0; i < 4; ++i)
 			u[i] = o->u[i];
+		for (int i = 0; i < 8; ++i){
+			dx[i] = o->dx[i];
+			dy[i] = o->dy[i];
+		}
+		cell_dx = o->cell_dx;
+		cell_dy = o->cell_dy;
 	}
 	quad ghost_cell(){
-		quad ret(NULL, -1);
+		quad ret(nan("ghost"), nan("ghost"), nan("ghost"));
 		ret.solid_phi = -solid_phi;
 		ret.phi = phi;
 		for (int i = 0; i < 4; ++i)
 			ret.u[i] = u[i];
+		for (int i = 0; i < 8; ++i){
+			ret.dx[i] = -dx[i];
+			ret.dy[i] = -dy[i];
+		}
+		ret.cell_dx = -cell_dx;
+		ret.cell_dy = -cell_dy;
 		return ret;
 	}
 	quad(double x, double y, double r) : parent(NULL), index(-1), x(x), y(y), r(r), neighbour(), child(){}
@@ -110,13 +135,23 @@ found:;
 		return x-r <= px && px <= x+r && y-r <= py && py <= y+r;
 	}
 	const quad *query(double px, double py)const{
-		assert(contains(px, py));
 		if (!child[0])
 			return this;
-		for (int i = 0; i < 4; ++i)
-			if (child[i]->contains(px, py))
-				return child[i]->query(px, py);
-		assert(false);
+		int i;
+		if (px >= x)
+			if (py >= y)
+				i = 0;
+			else
+				i = 3;
+		else if (py >= y)
+			i = 1;
+		else
+			i = 2;
+		return child[i]->query(px, py);
+		//for (int i = 0; i < 4; ++i)
+		//	if (child[i]->contains(px, py))
+		//		return child[i]->query(px, py);
+		//assert(false);
 	}
 	quad *query(double px, double py){
 		return const_cast<quad*>(static_cast<const quad&>(*this).query(px, py));
@@ -176,6 +211,9 @@ found:;
 	double query_sample(double sx, double sy, size_t offset)const{
 		return query(sx, sy)->sample(sx, sy, offset);
 	}
+	void query_sample_u(double sx, double sy, double& dx, double& dy)const{
+		query(sx, sy)->sample_u(sx, sy, dx, dy);
+	}
 	double& field(size_t offset){
 		return *(double*)(((char*)(this))+offset);
 	}
@@ -188,16 +226,18 @@ found:;
 			double lx = -1, ly = -1;
 			if (!pq)
 				goto barycentric;
-			if (!p->x || !q->x){
-				lx = sx/pq->x;
-				const quad *const t = p->x ? p : q;
+			if ((p->x == c->x && q->x == pq->x) || (q->x == c->x && p->x == pq->x)){
+				lx = sx/(pq->x-c->x);
+				const quad *const s = p->x == c->x ? p : q,
+					       *const t = p->x != c->x ? p : q;
 				if (0 <= lx && lx <= 1)
-					ly = (sy-lx*(c->r-t->r))/(2*(c->r-lx*(c->r-t->r)));
-			}else if(!p->y || !q->y){
-				ly = sy/pq->y;
-				const quad *const t = p->y ? p : q;
+					ly = (sy-lx*(t->y-c->y))/((1-lx)*(s->y-c->y)+lx*(pq->y-t->y));
+			}else if((p->y == c->y && q->y == pq->y) || (q->y == c->y && p->y == pq->y)){
+				ly = sy/(pq->y-c->y);
+				const quad *const s = p->y == c->y ? p : q,
+					       *const t = p->y != c->y ? p : q;
 				if (0 <= ly && ly <= 1)
-					lx = (sx-ly*(c->r-t->r))/(2*(c->r-ly*(c->r-t->r)));
+					lx = (sx-ly*(t->x-c->x))/((1-ly)*(s->x-c->x)+ly*(pq->x-t->x));
 			}else
 				goto barycentric;
 			if (0 <= lx && lx <= 1 &&
@@ -207,15 +247,8 @@ found:;
 			}
 			return true;
 barycentric:
-			double D = p->y*q->x-p->x*q->y, // determinant
-				 Dpl = q->x*sy-q->y*sx,
-				 Dql = p->y*sx-p->x*sy,
-				 Drl = D-Dpl-Dql;
-			if (D < 0 ? // check if D?l/D \in [0, 1] without division
-					D <= Dpl && Dpl <= 0 &&
-					D <= Dql && Dql <= 0: // rl condition checks if s is too far, and should always be true
-					0 <= Dpl && Dpl <= D &&
-					0 <= Dql && Dql <= D){
+			double D, Dpl, Dql, Drl;
+			if (barycentric(p->x-c->x, p->y-c->y, q->x-c->x, q->y-c->y, sx, sy, D, Dpl, Dql, Drl)){
 				ret = (Dpl*p->field(offset)+Dql*q->field(offset)+Drl*c->field(offset))/D;
 				return false;
 			}
@@ -224,7 +257,30 @@ barycentric:
 		assert(!failed);
 		return ret;
 	}
-	void split(std::function<void(quad*)>cb=NULL){
+	void sample_u(double sx, double sy, double& dx, double& dy)const{
+		assert(!child[0]);
+		sx = max(-r, min(r, sx-x));
+		sy = max(-r, min(r, sy-y));
+		dx = dy = nan("not found");
+		int i = 0;
+		const bool failed = (const_cast<quad*>(this))->visit_my_vertices([sx, sy, &i, &dx, &dy](quad *c, quad *p, quad*, quad *q){
+			double D, Dpl, Dql, Drl;
+			if (barycentric(p->x-c->x, p->y-c->y, q->x-c->x, q->y-c->y, sx, sy, D, Dpl, Dql, Drl)){
+				assert(D || !(Dpl || Dql || Drl));
+				dx = (Dpl*c->dx[i]+Dql*c->dx[(i+1)%8]+Drl*c->cell_dx)/(D ? D : 1);
+				dy = (Dpl*c->dy[i]+Dql*c->dy[(i+1)%8]+Drl*c->cell_dy)/(D ? D : 1);
+				assert(!isnan(dx));
+				assert(!isnan(dy));
+				return false;
+			}
+			++i;
+			return true;
+		});
+		assert(!isnan(dx));
+		assert(!isnan(dy));
+		assert(!failed);
+	}
+	void split(std::function<void(quad*)>cb=NULL){ // XXX check shared edge condition
 		for (int i = 0; i < 4; ++i)
 			if (neighbour[i] && neighbour[i]->r > r)
 				neighbour[i]->split(cb);
@@ -294,6 +350,7 @@ barycentric:
 					!cb(p, j))
 					return false;
 			}
+			return true;
 		});
 	}
 	bool visit_my_vertices(std::function<bool(quad*, quad*, quad*, quad*)>cb){
@@ -312,7 +369,7 @@ barycentric:
 #define IF_TRY_GHOST(q,n,k) \
 if (!(n) || !(n)->neighbour[(k)]){\
 	const double macro_gr = (n) ? (n)->r : r; \
-	new(&ghost[nr_ghost]) quad(2*macro_gr*cos[(k)], 2*macro_gr*sin[(k)], macro_gr);\
+	new(&ghost[nr_ghost]) quad(x+2*macro_gr*cos[(k)], y+2*macro_gr*sin[(k)], macro_gr);\
 	ghost[nr_ghost].copy_from(&ghost_values);\
 	(q) = &ghost[nr_ghost];\
 	nr_ghost = (nr_ghost+1)%(sizeof(ghost_buf)/sizeof(ghost[0]));\
@@ -326,9 +383,11 @@ if (!(n) || !(n)->neighbour[(k)]){\
 					pq = NULL;
 				if (!pq){
 					quad *const pred = n ? n->neighbour[(j+3)%4] : NULL;
-					if (pred && pred->r == n->r)
+					if (pred && pred->r == n->r){
 						pq = pred;
-					else IF_TRY_GHOST(pq, n, (j+3)%4);
+						if (pq->child[0])
+							pq = pq->child[(j+1)%4];
+					}else IF_TRY_GHOST(pq, n, (j+3)%4);
 				}
 				if (!cb(this, p, pq, q))
 					return false;
@@ -337,9 +396,11 @@ if (!(n) || !(n)->neighbour[(k)]){\
 			pq = NULL;
 			if (n){
 				quad *const succ = n->neighbour[(j+1)%4];
-				if (succ && succ->r == n->r)
+				if (succ && succ->r == n->r){
 					pq = succ;
-				else IF_TRY_GHOST(pq, n, (j+1)%4);
+					if (pq->child[0])
+						pq = pq->child[(j+2)%4];
+				}else IF_TRY_GHOST(pq, n, (j+1)%4);
 			}
 #undef IF_TRY_GHOST
 		}
@@ -354,7 +415,8 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 50;
+	//const double gx = 0, gy = -.05, T = 50;
+	const double gx = 0, gy = -.2, T = 50;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
@@ -363,8 +425,15 @@ int main(){
 	for (int i = 0; i < a.size(); ++i){
 		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
-		c->solid_phi = 1-hypot(c->x, c->y);
-		c->phi = max(-c->solid_phi, c->x+.25*c->y);
+		//c->solid_phi = 1-hypot(c->x, c->y);
+		//c->phi = max(-c->solid_phi, c->x+.25*c->y);
+		c->solid_phi = 1;
+		c->phi = c->y;
+		for (int i = 0; i < 4; ++i)
+			c->u[i] = 0;
+		for (int i = 0; i < 8; ++i)
+			c->dx[i] = c->dy[i] = 0;
+		c->cell_dx = c->cell_dy = 0;
 		if (c->r < (min(fabs(c->solid_phi), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
 			continue;
 		c->split([&a](quad *n){
@@ -379,7 +448,8 @@ int main(){
 		root->visit_faces([gx, gy](quad *const p, int j){
 			quad *const q = p->neighbour[j];
 			if (p->phi < 0 || q->phi < 0){
-				const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
+				//const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
+				const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j)/p->n(j);
 				p->u[j] += flow;
 				q->u[(j+2)%4] -= flow;
 			}
@@ -387,32 +457,65 @@ int main(){
 		});
 
 		{
-			std::map<std::pair<const quad*, const quad*>, double>dx_n, dx_d, dy_n, dy_d;
+			std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
 			root->visit_faces([&](const quad *const p, const int j){
 				quad *const q = p->neighbour[j];
-				const std::pair<const quad*, const quad*> pq = std::make_pair(p, q), qp = std::make_pair(q, p);
-				const static double epsilon = .03;
-				double u = p->u[j], nx = p->nx(j), ny = p->ny(j), n = hypot(nx, ny), w_inv = nx*nx+ny*ny+epsilon*epsilon; // n**2+epsilon**2
-				nx /= n*w_inv;
-				ny /= n*w_inv;
-#define FLOW(a, q) do{\
-	a[(pq)] += (q);\
-	a[(qp)] -= (q);\
-	}while(0)
-				FLOW(dx_n, nx*u);
-				FLOW(dx_d, nx);
-				FLOW(dy_n, ny*u);
-				FLOW(dy_d, ny);
+				assert(!p->child[0] && !q->child[0]);
+				const std::pair<const quad*, const quad*>pq = std::make_pair(p, q), qp = std::make_pair(q, p);
+				const static double epsilon = .001; // XXX adjust
+				double    u = p->u[j],
+					     nx = p->nx(j),
+					     ny = p->ny(j),
+					      n = hypot(nx, ny),
+						 n2 = nx*nx+ny*ny,
+					  w_inv = .25*n2+epsilon*epsilon,
+					divisor = w_inv*w_inv;
+				nx /= n;
+				ny /= n;
+#define FLOW(a,q) do{\
+	(a)[pq] += (q);\
+	(a)[qp] -= (q);\
+}while(0)
+				FLOW(unx, u*nx); // cell x cell => edge
+				FLOW(uny, u*ny);
+				FLOW(nxny, nx*ny);
+				FLOW(nx2, nx*nx);
+				FLOW(ny2, ny*ny);
 #undef FLOW
 				return true;
 			});
 			root->visit_cells([&](quad *const n){
 				double cell_dx_n = 0, cell_dy_n = 0;
 				int i = 0;
-				const bool success = n->visit_my_vertices([&](quad *p, quad *q, quad *r, quad *s){
-					const std::pair<const quad*, const quad*> pq = std::make_pair(p, q);
-					cell_dx_n += p->dx[i  ] = dx_n[pq]/dx_d[pq];
-					cell_dy_n += p->dy[i++] = dy_n[pq]/dy_d[pq];
+				const bool success = n->visit_my_vertices([&](quad *p, const quad *q, const quad *r, const quad *s){
+					double my_unx = 0, my_uny = 0, my_nxny = 0, my_nx2 = 0, my_ny2 = 0;
+#define VISIT(p,q) do{\
+	const std::pair<const quad*, const quad*>pq = std::make_pair(p, q);\
+	my_unx += unx[pq];\
+	my_uny += uny[pq];\
+	my_nxny += nxny[pq];\
+	my_nx2 += nx2[pq];\
+	my_ny2 += ny2[pq];\
+}while(0)
+					VISIT(p, q); // edge x edge => vertex
+					if (r){
+						VISIT(q, r);
+						VISIT(r, s);
+					}else
+						VISIT(q, s);
+					VISIT(s, p);
+#undef VISIT
+					const double det = my_nxny*my_nxny-my_nx2*my_ny2;
+//					assert(det || !((my_nxny*my_uny-my_ny2*my_unx) || (my_nxny*my_unx-my_nx2*my_uny)));
+//if (!(det || !((my_nxny*my_uny-my_ny2*my_unx) || (my_nxny*my_unx-my_nx2*my_uny))))
+//	std::cerr << my_unx << ", " << my_uny << ", " << my_nxny << ", " << my_nx2 << ", " << my_ny2 << ": (" <<  (my_nxny*my_uny-my_ny2*my_unx) << ", " << (my_nxny*my_unx-my_nx2*my_uny) << ")/" << det << std::endl;
+					cell_dx_n += p->dx[i  ] = det ? (my_nxny*my_uny-my_ny2*my_unx)/det : 0; // vertex* => cell
+					cell_dy_n += p->dy[i++] = det ? (my_nxny*my_unx-my_nx2*my_uny)/det : 0;
+					assert(i <= 8);
+					if (i != 8){
+						p->dx[i] = p->dx[0];
+						p->dy[i] = p->dy[0];
+					}
 					return true;
 				});
 				assert(success);
@@ -425,9 +528,23 @@ int main(){
 		phi.clear();
 		phi.resize(a.size());
 		static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
+double den = 0, num = 0;
 		for (int i = 0; i < a.size(); ++i)
-			if (!a[i]->child[0])
-				phi[i] = root->query_sample(a[i]->x, a[i]->y, offsetof(quad, phi)); // TODO consider velocity
+			if (!a[i]->child[0]){
+				double dx, dy;
+				root->query_sample_u(a[i]->x, a[i]->y, dx, dy);
+//std::cerr << dx << ", " << dy << " == " << a[i]->cell_dx << ", " << a[i]->cell_dy << std::endl;
+assert(fabs(dx-a[i]->cell_dx) < 1e-6);
+assert(fabs(dy-a[i]->cell_dy) < 1e-6);
+den += a[i]->r*a[i]->r*4;
+if (!dx && !dy)
+	num += a[i]->r*a[i]->r*4;
+//std::cerr << "dx = " << dx << ", dy = " << dy << std::endl;
+				phi[i] = root->query_sample(a[i]->x-dx, a[i]->y-dy, offsetof(quad, phi)); // TODO consider velocity
+//if (-.5 <= a[i]->x && a[i]->x <= .5 && -.75 <= a[i]->y && a[i]->y <= -.25)
+//	std::cerr << "phi: " << a[i]->phi << " => " << phi[i] << std::endl;
+			}
+std::cerr << "zero velocity: " << num << "/" << den << std::endl;
 		for (int i = 0; i < a.size(); ++i)
 			if (!a[i]->child[0])
 				a[i]->phi = phi[i];
@@ -438,6 +555,7 @@ int main(){
 			if (a[i]->child[0])
 				for (int j = 0; j < 4; ++j)
 					a.push_back(a[i]->child[j]);
+		root->check_relations();
 		rpc("draw_quad", a);
 	}
 	return 0;
