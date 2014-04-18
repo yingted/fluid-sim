@@ -472,15 +472,15 @@ int main(){
 					divisor = w_inv*w_inv;
 				nx /= n;
 				ny /= n;
-#define FLOW(a,q) do{\
+#define FLOW(a,q,r) do{\
 	(a)[pq] += (q);\
-	(a)[qp] -= (q);\
+	(a)[qp] += (r)*(q);\
 }while(0)
-				FLOW(unx, u*nx); // cell x cell => edge
-				FLOW(uny, u*ny);
-				FLOW(nxny, nx*ny);
-				FLOW(nx2, nx*nx);
-				FLOW(ny2, ny*ny);
+				FLOW(unx, u*nx/divisor, -1); // cell x cell => edge
+				FLOW(uny, u*ny/divisor, -1);
+				FLOW(nxny, nx*ny/divisor, 1);
+				FLOW(nx2, nx*nx/divisor, 1);
+				FLOW(ny2, ny*ny/divisor, 1);
 #undef FLOW
 				return true;
 			});
@@ -506,11 +506,31 @@ int main(){
 					VISIT(s, p);
 #undef VISIT
 					const double det = my_nxny*my_nxny-my_nx2*my_ny2;
-//					assert(det || !((my_nxny*my_uny-my_ny2*my_unx) || (my_nxny*my_unx-my_nx2*my_uny)));
-//if (!(det || !((my_nxny*my_uny-my_ny2*my_unx) || (my_nxny*my_unx-my_nx2*my_uny))))
-//	std::cerr << my_unx << ", " << my_uny << ", " << my_nxny << ", " << my_nx2 << ", " << my_ny2 << ": (" <<  (my_nxny*my_uny-my_ny2*my_unx) << ", " << (my_nxny*my_unx-my_nx2*my_uny) << ")/" << det << std::endl;
-					cell_dx_n += p->dx[i  ] = det ? (my_nxny*my_uny-my_ny2*my_unx)/det : 0; // vertex* => cell
-					cell_dy_n += p->dy[i++] = det ? (my_nxny*my_unx-my_nx2*my_uny)/det : 0;
+					if (det){
+						p->dx[i] = (my_nxny*my_uny-my_ny2*my_unx)/det; // vertex* => cell
+						p->dy[i] = (my_nxny*my_unx-my_nx2*my_uny)/det;
+					}else if(my_nx2 || my_nxny || my_ny2){ // always true
+						double A, B, C; // (A, B, C) = (nx2, nxny, unx)+(nxny, ny2, uny)
+						if (my_nxny < 0 && my_nx2){ // can cancel in A, so first-second
+							A = my_nx2-my_nxny; // XXX check if this is the regularized solution
+							B = my_nxny-my_ny2;
+							C = my_unx-my_uny;
+						}else{ // cannot cancel in A, so first+second
+							A = my_nx2+my_nxny;
+							B = my_nxny+my_ny2;
+							C = my_unx+my_uny;
+						}
+						const double coef = C/(A*A+B*B);
+						p->dx[i] = A*coef;
+						p->dy[i] = B*coef;
+					}else{
+//std::cerr << my_unx << ", " << my_uny << ", " << my_nxny << ", " << my_nx2 << ", " << my_ny2 << ": (" <<  (my_nxny*my_uny-my_ny2*my_unx) << ", " << (my_nxny*my_unx-my_nx2*my_uny) << ")/" << det << std::endl;
+						assert(!(my_unx || my_uny)); // corner
+						p->dx[i] = 0;
+						p->dy[i] = 0;
+					}
+					cell_dx_n += p->dx[i  ];
+					cell_dy_n += p->dy[i++];
 					assert(i <= 8);
 					if (i != 8){
 						p->dx[i] = p->dx[0];
