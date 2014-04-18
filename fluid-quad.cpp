@@ -416,10 +416,11 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 
 int main(){
 	//const double gx = 0, gy = -.05, T = 50;
-	const double gx = 0, gy = -.05, T = 10;
+	const double gx = 0, gy = -.005, T = 100;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
+	static std::vector<double>nu;
 
 	a.push_back(root);
 	for (int i = 0; i < a.size(); ++i){
@@ -456,8 +457,13 @@ int main(){
 			return true;
 		});
 
-		{
-			std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
+		{ // velocity
+			static std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
+			unx.clear();
+			uny.clear();
+			nxny.clear();
+			nx2.clear();
+			ny2.clear();
 			root->visit_faces([&](const quad *const p, const int j){
 				quad *const q = p->neighbour[j];
 				assert(!p->child[0] && !q->child[0]);
@@ -511,7 +517,7 @@ int main(){
 						p->dy[i] = (my_nxny*my_unx-my_nx2*my_uny)/det;
 					}else if(my_nx2 || my_nxny || my_ny2){ // always true
 						double A, B, C; // (A, B, C) = (nx2, nxny, unx)+(nxny, ny2, uny)
-						if (my_nxny < 0 && my_ny2){ // can cancel in A, so first-second
+						if (my_nxny < 0 && my_nx2){ // can cancel in A, so first-second
 							A = my_nx2-my_nxny; // XXX check if this is the regularized solution
 							B = my_nxny-my_ny2;
 							C = my_unx-my_uny;
@@ -543,7 +549,28 @@ int main(){
 				n->cell_dy = cell_dy_n/i;
 				return true;
 			});
-		} // TODO pressure solve
+		}
+
+		// TODO pressure solve
+		{
+			nu.clear();
+			root->visit_faces([gx, gy, root](quad *const p, int j){
+				double dx, dy, nx = p->nx(j), ny = p->ny(j), cx = p->x+.5*nx, cy = p->y+.5*ny;
+p->neighbour[j]->sample_u(cx, cy, dx, dy);
+std::cerr << dx << ", " << dy << " = ";
+				p->sample_u(cx, cy, dx, dy);
+std::cerr << dx << ", " << dy << std::endl; // XXX this is not true
+				root->query_sample_u(cx-dx, cy-dy, dx, dy);
+				nu.push_back((dx*nx+dy*ny)/hypot(nx, ny));
+				return true;
+			});
+			static int i;
+			i = 0;
+			root->visit_faces([gx, gy](quad *const p, int j){
+				p->neighbour[j]->u[(j+2)%4] = -(p->u[j] = nu[i++]);
+				return true;
+			});
+		}
 
 		phi.clear();
 		phi.resize(a.size());
@@ -584,14 +611,6 @@ double sample(const grid& a, double x, double y){
 	double s = pi-ii, t = pj-ij;
 	return (1-s)*((1-t)*a[ii  ][ij]+t*a[ii  ][ij+1])
 	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
-}
-
-grid advection(const grid& a0, const grid& dx, const grid& dy, double ox, double oy, int type){
-	grid a = a0;
-	for (int i = 0; i < a0.size(); ++i)
-		for (int j = 0; j < a0[i].size(); ++j)
-			a[i][j] = sample(a0, i-sample(dx, i+ox, j), j-sample(dy, i, j+oy));
-	return std::move(a);
 }
 
 #define THETA(i2,j2) (std::max(1e-2, phi_theta(phi[i][j], phi[(i2)][(j2)])))
@@ -909,11 +928,6 @@ while(0)
 		// advection
 		{
 			std::vector<double>bx, by;
-			grid ndx = advection(dx, dx, dy,  0, .5, BOUNDARY_VERTICAL);
-			dy = advection(dy, dx, dy, .5,  0, BOUNDARY_HORIZONTAL);
-			dx = std::move(ndx);
-			//rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
-			phi = advection(phi, dx, dy, .5, .5, BOUNDARY_NONE);
 			interpolate_surface(phi, bx, by);
 			if ((t+1)%redistance_period == 0)
 				redistance(phi, bx, by);
