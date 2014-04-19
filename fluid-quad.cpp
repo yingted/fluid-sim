@@ -191,7 +191,6 @@ found:;
 		return ret;
 	}
 	const quad *query_power(double px, double py)const{
-		assert(contains(px, py));
 		if (child[0])
 			return query(px, py)->query_power(px, py);
 		double best = power(px, py);
@@ -206,13 +205,14 @@ found:;
 				}
 			}
 		}
+		assert(best <= 0);
 		return ret;
 	}
 	double query_sample(double sx, double sy, size_t offset)const{
 		return query(sx, sy)->sample(sx, sy, offset);
 	}
 	void query_sample_u(double sx, double sy, double& dx, double& dy)const{
-		query(sx, sy)->sample_u(sx, sy, dx, dy);
+		query_power(sx, sy)->sample_u(sx, sy, dx, dy);
 	}
 	double& field(size_t offset){
 		return *(double*)(((char*)(this))+offset);
@@ -263,9 +263,24 @@ barycentric:
 		sy = max(-r, min(r, sy-y));
 		dx = dy = nan("not found");
 		int i = 0;
+std::cerr << std::endl;
 		const bool failed = (const_cast<quad*>(this))->visit_my_vertices([sx, sy, &i, &dx, &dy](quad *c, quad *p, quad*, quad *q){
-			double D, Dpl, Dql, Drl;
-			if (barycentric(p->x-c->x, p->y-c->y, q->x-c->x, q->y-c->y, sx, sy, D, Dpl, Dql, Drl)){
+			double D, Dpl, Dql, Drl,
+				 cx = (p->x-c->x)/(p->r > c->r ? 3 : 2), // .5*c->nx(j) where q == c->neighbour[j]
+				 cy = (p->y-c->y)/(p->r > c->r ? 3 : 2),
+				dcx = .5*-cy, // rotate by pi/2
+				dcy = .5* cx;
+			if (p->r > c->r){
+				if (fabs(cx) < fabs(cy)){
+					cx = 0;
+					cy = 2*cy/3;
+				}else if (fabs(cy) < fabs(cx)){
+					cx = 2*cx/3;
+					cy = 0;
+				}else
+					assert(false);
+			}
+			if (barycentric(cx-dcx, cy-dcy, cx+dcx, cy+dcy, sx, sy, D, Dpl, Dql, Drl)){
 				assert(D || !(Dpl || Dql || Drl));
 				dx = (Dpl*c->dx[i]+Dql*c->dx[(i+1)%8]+Drl*c->cell_dx)/(D ? D : 1);
 				dy = (Dpl*c->dy[i]+Dql*c->dy[(i+1)%8]+Drl*c->cell_dy)/(D ? D : 1);
@@ -273,6 +288,7 @@ barycentric:
 				assert(!isnan(dy));
 				return false;
 			}
+std::cerr << "barycentric " << Dpl/D << " " << Dql/D << " " << Drl/D << std::endl;
 			++i;
 			return true;
 		});
@@ -490,6 +506,7 @@ int main(){
 #undef FLOW
 				return true;
 			});
+std::map<std::vector<const quad*>, std::vector<double> >lut;
 			root->visit_cells([&](quad *const n){
 				double cell_dx_n = 0, cell_dy_n = 0;
 				int i = 0;
@@ -511,6 +528,20 @@ int main(){
 						VISIT(q, s);
 					VISIT(s, p);
 #undef VISIT
+std::vector<const quad*>ptrs{p,q,r,s};
+if (!r)
+	ptrs.erase(ptrs.begin()+2);
+while(ptrs[0]!=*std::min_element(ptrs.begin(),ptrs.end())){
+	ptrs.push_back(ptrs[0]);
+	ptrs.erase(ptrs.begin());
+}
+std::vector<double>vals{my_unx,my_uny,my_nxny,my_nx2,my_ny2};
+if(!lut.count(ptrs))
+	lut[ptrs]=vals;
+else{
+	for(int ii=0;ii<vals.size();++ii)
+		assert(fabs(vals[ii]-lut[ptrs][ii])<1e-6);
+}
 					const double det = my_nxny*my_nxny-my_nx2*my_ny2;
 					if (det){
 						p->dx[i] = (my_nxny*my_uny-my_ny2*my_unx)/det; // vertex* => cell
@@ -555,11 +586,22 @@ int main(){
 		{
 			nu.clear();
 			root->visit_faces([gx, gy, root](quad *const p, int j){
-				double dx, dy, nx = p->nx(j), ny = p->ny(j), cx = p->x+.5*nx, cy = p->y+.5*ny;
-p->neighbour[j]->sample_u(cx, cy, dx, dy);
-std::cerr << dx << ", " << dy << " = ";
+				bool is_slanted_face = p->neighbour[j]->r > p->r;
+				double dx, dy, nx = p->nx(j), ny = p->ny(j),
+					cx = p->x+p->r*quad::cos[j]*(1-is_slanted_face/3.),
+					cy = p->y+p->r*quad::sin[j]*(1-is_slanted_face/3.);
 				p->sample_u(cx, cy, dx, dy);
-std::cerr << dx << ", " << dy << std::endl; // XXX this is not true
+double dx2, dy2, dx3, dy3;
+assert(p->query_power(cx, cy) == p || p->query_power(cx, cy) == p->neighbour[j]);
+assert(p->neighbour[j]->query_power(cx, cy) == p || p->neighbour[j]->query_power(cx, cy) == p->neighbour[j]);
+p->neighbour[j]->query_sample_u(cx, cy, dx2, dy2); // XXX not all equal
+root->query_sample_u(cx, cy, dx3, dy3); // XXX not all equal
+if (!(fabs(dx-dx2) < 1e-6 && fabs(dx2-dx3) < 1e-6 && fabs(dy-dy2) < 1e-6 && fabs(dy2-dy3) < 1e-6)){
+	std::cerr << dx << ", " << dy << '\n';
+	std::cerr << dx2 << ", " << dy2 << '\n';
+	std::cerr << dx3 << ", " << dy3 << '\n' << std::endl;
+	assert(false);
+}
 				root->query_sample_u(cx-dx, cy-dy, dx, dy);
 				nu.push_back((dx*nx+dy*ny)/hypot(nx, ny));
 				return true;
