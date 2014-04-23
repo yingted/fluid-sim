@@ -399,12 +399,9 @@ barycentric:
 			if (!(n && n->child[0]))
 				++i;
 #define IF_TRY_GHOST(q,n,k) \
-if (!(n) || !(n)->neighbour[(k)]){\
-	if (n){\
-		const double macro_gr = (n)->r; \
-		new(&ghost[nr_ghost]) quad((n)->x+2*macro_gr*cos[(k)], (n)->y+2*macro_gr*sin[(k)], macro_gr);\
-	}else\
-		new(&ghost[nr_ghost]) quad(x+2*r*(cos[j]+cos[(k)]), y+2*r*(sin[j]+sin[(k)]), r);\
+if (!(n)->neighbour[(k)]){\
+	const double macro_gr = (n)->r; \
+	new(&ghost[nr_ghost]) quad((n)->x+2*macro_gr*cos[(k)], (n)->y+2*macro_gr*sin[(k)], macro_gr);\
 	ghost[nr_ghost].copy_from(&ghost_values);\
 	(q) = &ghost[nr_ghost];\
 	nr_ghost = (nr_ghost+1)%(sizeof(ghost_buf)/sizeof(ghost[0]));\
@@ -416,26 +413,32 @@ if (!(n) || !(n)->neighbour[(k)]){\
 			if (p){
 				if (r != q->r)
 					pq = NULL;
-				if (!pq && i%2 == !(n && n->child[0]) && (q->y-y)*cos[j]-(q->x-x)*sin[j] >= 0){
-					quad *const pred = n ? n->neighbour[(j+3)%4] : NULL;
-					if (pred && pred->r == n->r){
+				if (!pq && r == p->r && (q->y-y)*cos[j]-(q->x-x)*sin[j] == q->r-r){
+					quad *const pred = n ? q->neighbour[(j+3)%4] : NULL;
+					if (pred && pred->r == q->r){
 						pq = pred;
 						if (pq->child[0])
 							pq = pq->child[(j+1)%4];
-					}else IF_TRY_GHOST(pq, n, (j+3)%4);
+						if (q->r != pq->r)
+							pq = NULL;
+					}else IF_TRY_GHOST(pq, q, (j+3)%4);
+					assert(!pq || q->r == pq->r);
 				}
 				if (!cb(this, p, pq, q))
 					return false;
 			}
 			p = q;
 			pq = NULL;
-			if (n && i%2 && (q->y-y)*cos[j]-(q->x-x)*sin[j] <= 0){
-				quad *const succ = q->neighbour[(j+1)%4];
-				if (succ && succ->r == q->r){
+			if ((p->y-y)*cos[j]-(p->x-x)*sin[j] == r-p->r){
+				quad *const succ = p->neighbour[(j+1)%4];
+				if (succ && succ->r == p->r){
 					pq = succ;
 					if (pq->child[0])
 						pq = pq->child[(j+2)%4];
-				}else IF_TRY_GHOST(pq, n, (j+1)%4);
+					if (p->r != pq->r)
+						pq = NULL;
+				}else IF_TRY_GHOST(pq, p, (j+1)%4);
+				assert(!pq || p->r == pq->r);
 			}
 #undef IF_TRY_GHOST
 		}

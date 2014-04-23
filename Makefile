@@ -12,7 +12,7 @@ fluid-grid: fluid-grid.cpp util.hpp pcgsolver
 fluid-quad: fluid-quad.cpp util.hpp pcgsolver
 	g++ $(CFLAGS) -o fluid-quad{,.cpp} -L/usr/lib64/atlas -lcblas
 clean:
-	rm -f {smoke,fluid}-grid{,-gl}{,-*.ppm,.mkv,.trace} util-test
+	rm -f {smoke,fluid}-{grid,quad}{,-gl}{,-*.ppm,.mkv,.trace} util-test
 smoke-grid-0001.ppm: smoke-grid
 	./smoke-grid
 smoke-grid-play: smoke-grid-0001.ppm
