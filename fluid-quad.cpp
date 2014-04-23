@@ -424,26 +424,6 @@ if (!(n) || !(n)->neighbour[(k)]){\
 							pq = pq->child[(j+1)%4];
 					}else IF_TRY_GHOST(pq, n, (j+3)%4);
 				}
-if(pq){
-#define _MAYBE_NEIGH(a,j,b) ((a)->neighbour[(j)]==NULL||(a)->neighbour[(j)]==(b))
-#define _MAYBE_ADJ(a,j,b) (_MAYBE_NEIGH((a),(j)%4,(b))||_MAYBE_NEIGH((b),((j)+2)%4,(a)))
-	assert(_MAYBE_ADJ(this,j,q));
-	assert(_MAYBE_ADJ(this,j+3,p));
-	assert(_MAYBE_ADJ(p,j,pq));
-	assert(_MAYBE_ADJ(q,j+3,pq));
-#define _FAR(x,a,b) (fabs((a)->x-(b)->x)==(a)->r+(b)->r)
-	if(j&1){
-		assert(_FAR(y,this,q));
-		assert(_FAR(y,p,pq));
-		assert(_FAR(x,this,p));
-		assert(_FAR(x,q,pq));
-	}else{
-		assert(_FAR(x,this,q));
-		assert(_FAR(x,p,pq));
-		assert(_FAR(y,this,p));
-		assert(_FAR(y,q,pq));
-	}
-}
 				if (!cb(this, p, pq, q))
 					return false;
 			}
