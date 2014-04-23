@@ -414,7 +414,7 @@ if (!(n)->neighbour[(k)]){\
 				if (r != q->r)
 					pq = NULL;
 				if (!pq && r == p->r && (q->y-y)*cos[j]-(q->x-x)*sin[j] == q->r-r){
-					quad *const pred = n ? q->neighbour[(j+3)%4] : NULL;
+					quad *const pred = q->neighbour[(j+3)%4];
 					if (pred && pred->r == q->r){
 						pq = pred;
 						if (pq->child[0])
@@ -423,6 +423,8 @@ if (!(n)->neighbour[(k)]){\
 							pq = NULL;
 					}else IF_TRY_GHOST(pq, q, (j+3)%4);
 					assert(!pq || q->r == pq->r);
+					assert(!pq || fabs(pq->x-x) == pq->r+r);
+					assert(!pq || fabs(pq->y-y) == pq->r+r);
 				}
 				if (!cb(this, p, pq, q))
 					return false;
@@ -439,6 +441,8 @@ if (!(n)->neighbour[(k)]){\
 						pq = NULL;
 				}else IF_TRY_GHOST(pq, p, (j+1)%4);
 				assert(!pq || p->r == pq->r);
+				assert(!pq || fabs(pq->x-x) == pq->r+r);
+				assert(!pq || fabs(pq->y-y) == pq->r+r);
 			}
 #undef IF_TRY_GHOST
 		}
@@ -454,7 +458,7 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 
 int main(){
 	//const double gx = 0, gy = -.05, T = 50;
-	const double gx = 0, gy = -.005, T = 100;
+	const double gx = 0, gy = -.005, T = 50;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
