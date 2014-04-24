@@ -685,17 +685,70 @@ void advect(quad *root, std::vector<quad*>& a){
 	advect_phi(root, a);
 }
 void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double>& by){
+	typedef std::pair<double, quad*>cell_t;
+	static std::priority_queue<cell_t, std::vector<cell_t>, std::greater<cell_t> >q;
+	static std::map<quad*, int>ancestor;
+	static std::map<quad*, double>dist;
+	ancestor.clear();
+	dist.clear();
 	bx.clear();
 	by.clear();
-	root->visit_faces([&bx, &by](quad *p, int j){
-		quad *q = p->neighbour[j];
-		if ((p->phi < 0) == (q->phi < 0))
+#define NEIGH(p,i) do{\
+	const double d2 = hypot(p->x-bx[i], p->y-by[i]);\
+	if (!dist.count(p) || d2 < dist[p]){\
+		dist[p] = d2;\
+		ancestor[p] = i;\
+		q.push(std::make_pair(d2, p));\
+	}\
+}while(0)
+
+	root->visit_faces([&bx, &by](quad *u, int j){
+		quad *v = u->neighbour[j];
+		if ((u->phi < 0) == (v->phi < 0))
 			return true;
-		if (q->phi < 0)
-			swap(p, q);
-		const double theta = phi_theta(p->phi, q->phi);
-		bx.push_back((1-theta)*p->x+theta*q->x);
-		by.push_back((1-theta)*p->y+theta*q->y);
+		if (v->phi < 0)
+			swap(u, v);
+		const double theta = phi_theta(u->phi, v->phi);
+		bx.push_back((1-theta)*u->x+theta*v->x);
+		by.push_back((1-theta)*u->y+theta*v->y);
+		NEIGH(u, bx.size()-1);
+		NEIGH(v, bx.size()-1);
+		return true;
+	});
+	while(!q.empty()){ // redistance
+		const double d = q.top().first;
+		quad *u = q.top().second;
+		q.pop();
+		if (d != dist[u])
+			continue;
+		const int anc = ancestor[u];
+		double dx_n = 0, dy_n = 0, valid_area = 0;
+#define SEEN (dist.count(v) && (dist[v] < d || (dist[v] == d && v < u)))
+		u->visit_neighbours([&, anc, d](quad *u, quad *v, double area, double& flow){
+			if (!(u->phi < 0)){ // air
+				if (SEEN || v->phi < 0){ // valid
+					const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
+					valid_area += area;
+					dx_n += nx/n*(area*flow);
+					dy_n += ny/n*(area*flow);
+				}
+			}
+			return true;
+		});
+		u->visit_neighbours([=](quad *u, quad *v, double area, double& flow){
+			const bool seen = SEEN;
+			if (!(u->phi < 0) && !(seen || v->phi < 0)){ // air and invalid
+				const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
+				flow = (nx*dx_n+ny*dy_n)/(n*valid_area);
+			}
+			if (!seen)
+				NEIGH(v, anc);
+			return true;
+		});
+#undef SEEN
+	}
+	root->visit_cells([](quad *n){
+		n->phi = copysign(dist[n], n->phi);
 		return true;
 	});
 }
