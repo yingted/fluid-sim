@@ -782,32 +782,6 @@ double sample(const grid& a, double x, double y){
 	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
 }
 
-#define THETA(i2,j2) (std::max(1e-2, phi_theta(phi[i][j], phi[(i2)][(j2)])))
-void interpolate_surface(const grid& phi, std::vector<double>& bx, std::vector<double>& by){
-	bx.clear();
-	by.clear();
-	for (int i = 0; i < phi.size(); ++i)
-		for (int j = 0; j < phi[i].size(); ++j)
-			if (phi[i][j] < 0){
-#define CHECK(i2,j2) do{\
-	if(!(phi[(i2)][(j2)] < 0)){\
-		const double theta = THETA((i2),(j2));\
-		bx.push_back(i*(1-theta)+(i2)*theta+.5);\
-		by.push_back(j*(1-theta)+(j2)*theta+.5);\
-	}\
-}while(0)
-				if (i > 0)
-					CHECK(i-1, j);
-				if (i+1 < phi.size())
-					CHECK(i+1, j);
-				if (j > 0)
-					CHECK(i, j-1);
-				if (j+1 < phi[i].size())
-					CHECK(i, j+1);
-#undef CHECK
-			}
-}
-
 void redistance(grid& phi, const std::vector<double>& bx, const std::vector<double>& by){
 	const grid phi0 = phi;
 	std::vector<std::vector<bool> >seen = make_grid<bool>(phi.size(), phi[0].size());
