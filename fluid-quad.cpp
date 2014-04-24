@@ -628,8 +628,8 @@ void project(std::vector<quad*>& a){
 		if (!n->child[0] && n->phi < 0)
 			n->visit_neighbours([](quad *p, quad *q, double n, double& u){
 				double pp = row.count(p) ? result[row[p]] : 0,
-					   qp = row.count(q) ? result[row[q]] : 0;
-				if (phi_theta(p->phi, q->phi) && p < q) // pointer comparison
+				       qp = row.count(q) ? result[row[q]] : 0;
+				if (phi_theta(p->phi, q->phi) && (!(q->phi < 0) || p < q)) // pointer comparison
 					u += qp-pp;
 				return true;
 			});
