@@ -340,23 +340,47 @@ barycentric:
 		return (neighbour[i]->y-y)/(neighbour[i]->r > r ? 1.5 : 1);
 	}
 	double n(int i)const{
-		assert(neighbour[i]);
-		return hypot(nx(i), ny(i));
+		return neighbour[i] ? hypot(nx(i), ny(i)) : 2*r;
 	}
 	double theta(int i)const{
 		assert(neighbour[i]);
 		return phi_theta(phi, neighbour[i]->phi);
 	}
+	bool visit_neighbours(std::function<bool(quad*, quad*, double, double)>cb){
+		assert(this);
+		assert(cb);
+		for (int i = 0; i < 4; ++i)
+			if (!neighbour[i])
+				continue;
+			else if(!neighbour[i]->child[0]){
+				if (!cb(this, neighbour[i], n(i), u[i]))
+					return false;
+			}else
+				for (int j = 1; j < 3; ++j){
+					quad *const n = neighbour[i]->child[(i+1)%4];
+					if (!cb(this, n, n->n((i+2)%4), -n->u[(i+2)%4]))
+						return false;
+				}
+		return true;
+	}
 	double div(){
+		double ret = 0;
+		visit_neighbours([&ret](quad*, quad*, double n, double u){
+			ret += n*u;
+			return true;
+		});
+		return ret;
+	}
+	double div_old(){
 		double ret = 0;
 		for (int i = 0; i < 4; ++i)
 			if (!neighbour[i])
 				continue;
 			else if(!neighbour[i]->child[0])
-				ret += n(i);
+				ret += n(i)*u[i];
 			else
-				ret -= neighbour[i]->child[(i+1)%4]->n((i+2)%4)
-					+  neighbour[i]->child[(i+2)%4]->n((i+2)%4);
+				ret -= neighbour[i]->child[(i+1)%4]->n((i+2)%4)*neighbour[i]->child[(i+1)%4]->u[(i+2)%4]
+					+  neighbour[i]->child[(i+2)%4]->n((i+2)%4)*neighbour[i]->child[(i+2)%4]->u[(i+2)%4];
 		return ret;
 	}
 	bool visit_cells(std::function<bool(quad*)>cb){
@@ -378,7 +402,7 @@ barycentric:
 				quad *const q = p->neighbour[j];
 				if (q &&
 					!q->child[0] &&
-					(p->r < q->r || p < q) &&
+					(p->r < q->r || (p->r == q->r && p < q)) &&
 					!cb(p, j))
 					return false;
 			}
@@ -457,12 +481,10 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 }
 
 int main(){
-	//const double gx = 0, gy = -.05, T = 50;
-	const double gx = 0, gy = -.005, T = 50;
+	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
 	std::vector<double>phi;
-	static std::vector<double>nu;
 
 	a.push_back(root);
 	for (int i = 0; i < a.size(); ++i){
@@ -498,6 +520,90 @@ int main(){
 			}
 			return true;
 		});
+
+		{
+			static std::map<quad*, size_t>row;
+			static std::vector<double>rhs;
+			static std::vector<double>result;
+			row.clear();
+			rhs.clear();
+			result.clear();
+
+			for (quad *n : a)
+				if (!n->child[0] && n->phi < 0){
+					row[n] = rhs.size();
+					rhs.push_back(n->div());
+				}
+			SparseMatrix<double>mat(rhs.size());
+			result.resize(rhs.size());
+			for (quad *n : a)
+				if (!n->child[0])
+					for (int j = 0; j < 4; ++j){
+						quad *p = n, *q = p->neighbour[j];
+						double area = !q || !q->child[0] ? p->n(j) : q->n((j+2)%4), w = 1-phi_theta(p->solid_phi, p->solid_phi), theta = .5;
+						if (q == NULL){
+							if (!(p->phi < 0)) // air-wall boundary
+								continue;
+						}else if (!(p->r < q->r || (p->r == q->r && p < q))) // double count
+							continue;
+						if (q){
+							w = 1-phi_theta(p->solid_phi, q->solid_phi),
+							theta = phi_theta(p->phi, q->phi);
+						}
+						if (!theta || !w)
+							continue;
+						w *= area;
+						if (!(p->phi < 0))
+							swap(p, q);
+						assert(p && p->phi < 0);
+						const int pr = row[p];
+						if (q && q->phi < 0){
+							const int qr = row[q];
+							mat.add_to_element(pr, qr, -w);
+							mat.add_to_element(qr, pr, -w);
+							mat.add_to_element(qr, qr, w);
+						}else
+							w /= max(1e-2, theta);
+						mat.add_to_element(pr, pr, w);
+					}
+			rpc("check_symmetric", mat);
+			double residual;
+			int iterations;
+			PCGSolver<double>solver;
+//#ifdef NDEBUG
+			solver.set_solver_parameters(1e-5, 1000, .97, .25);
+//#endif
+			//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
+			assert(rhs == rhs);
+			bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
+			std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
+
+			for (quad *n : a)
+				if (!n->child[0])
+					for (int j = 0; j < 4; ++j)
+						if (!n->neighbour[j])
+							n->u[j] = 0;
+			root->visit_faces([](quad *const p, int j){
+				quad *q = p->neighbour[j];
+				double theta = phi_theta(p->phi, q->phi);
+				if (!theta)
+					return true;
+				double pp = 0, qp = 0;
+				if (row.count(p))
+					pp = result[row[p]];
+				if (row.count(q))
+					qp = result[row[q]];
+				theta = max(1e-2, theta)*p->n(j);
+				//std::cerr << q->u[(j+2)%4] << " = -(" << p->u[j] << " += " << (qp-pp)/max(1e-2, theta) << ")"<< std::endl;
+				const double flow = (qp-pp)/theta;
+				p->u[j] += flow;
+				q->u[(j+2)%4] -= flow;
+				return true;
+			});
+		}
+		for (quad *n : a)
+			if (!n->child[0] && n->phi < 0)
+				assert(fabs(n->div()) <= 1e-2); // XXX fails
 
 		{ // velocity
 			static std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
@@ -588,27 +694,6 @@ int main(){
 				assert(success);
 				n->cell_dx = cell_dx_n/i;
 				n->cell_dy = cell_dy_n/i;
-				return true;
-			});
-		}
-
-		// TODO pressure solve
-		{
-			nu.clear();
-			root->visit_faces([gx, gy, root](quad *const p, int j){
-				bool is_slanted_face = p->neighbour[j]->r > p->r;
-				double dx, dy, nx = p->nx(j), ny = p->ny(j),
-					cx = p->x+p->r*quad::cos[j]*(1-is_slanted_face/3.),
-					cy = p->y+p->r*quad::sin[j]*(1-is_slanted_face/3.);
-				p->sample_u(cx, cy, dx, dy);
-				root->query_sample_u(cx-dx, cy-dy, dx, dy);
-				nu.push_back((dx*nx+dy*ny)/hypot(nx, ny));
-				return true;
-			});
-			static int i;
-			i = 0;
-			root->visit_faces([gx, gy](quad *const p, int j){
-				p->neighbour[j]->u[(j+2)%4] = -(p->u[j] = nu[i++]);
 				return true;
 			});
 		}
