@@ -821,161 +821,11 @@ int main(){
 
 // old code
 
-template<typename T>
-int clamp(T x, int start, int stop){
-	return floor(std::max<T>(start, std::min<T>(nextafter(stop, start), x)));
-}
-
-double sample(const grid& a, double x, double y){
-	double pi = std::max(0., std::min(nextafter(a   .size()-1, 0), x)), // coords
-	       pj = std::max(0., std::min(nextafter(a[0].size()-1, 0), y));
-	int ii = floor(pi), ij = floor(pj);
-	double s = pi-ii, t = pj-ij;
-	return (1-s)*((1-t)*a[ii  ][ij]+t*a[ii  ][ij+1])
-	       +  s *((1-t)*a[ii+1][ij]+t*a[ii+1][ij+1]);
-}
-
-void redistance(grid& phi, const std::vector<double>& bx, const std::vector<double>& by){
-	const grid phi0 = phi;
-	std::vector<std::vector<bool> >seen = make_grid<bool>(phi.size(), phi[0].size());
-	std::vector<std::vector<int> >ancestor = make_grid<int>(phi.size(), phi[0].size());
-	typedef std::pair<double, std::pair<int, int> >vertex_t;
-	std::priority_queue<vertex_t, std::vector<vertex_t>, std::greater<vertex_t> >q;
-	for (int i = 0; i < phi.size(); ++i)
-		for (int j = 0; j < phi[0].size(); ++j)
-			phi[i][j] = std::numeric_limits<double>::infinity();
-	for (int i = 0; i < bx.size(); ++i){
-		const int x_lo = clamp(bx[i]-.5, -1, phi.size()),
-		          y_lo = clamp(by[i]-.5, -1, phi[0].size());
-		for (int cx = max(0, x_lo); cx <= std::min<int>(phi.size()-1, x_lo+1); ++cx)
-			for (int cy = max(0, y_lo); cy <= std::min<int>(phi[0].size()-1, y_lo+1); ++cy){
-				const double d = hypot(cx+.5-bx[i], cy+.5-by[i]);
-				if (d < fabs(phi[cx][cy])){
-					phi[cx][cy] = copysign(d, sample(phi0, cx, cy));
-					ancestor[cx][cy] = i;
-					q.push(std::make_pair(d, std::make_pair(cx, cy)));
-				}
-			}
-	}
-	while (!q.empty()){
-		const double d = q.top().first;
-		const int cx = q.top().second.first,
-		          cy = q.top().second.second;
-		q.pop();
-		if (d != fabs(phi[cx][cy]))
-			continue;
-		seen[cx][cy] = true;
-		const int anc = ancestor[cx][cy];
-		const double x = bx[anc],
-		             y = by[anc];
-#define CHECK(i2,j2) do{\
-	const int i = (i2), j = (j2);\
-	if (!seen[i][j]){\
-		const double d2 = hypot(i+.5-x, j+.5-y);\
-		if (d2 < fabs(phi[i][j])){\
-			phi[i][j] = copysign(d2, sample(phi0, i, j));\
-			ancestor[i][j] = anc;\
-			q.push(std::make_pair(d2, std::make_pair(i, j)));\
-		}\
-	}\
-}while(0)
-		if (cx)
-			CHECK(cx-1, cy);
-		if (cx+1 < phi.size())
-			CHECK(cx+1, cy);
-		if (cy)
-			CHECK(cx, cy-1);
-		if (cy+1 < phi[0].size())
-			CHECK(cx, cy+1);
-#undef CHECK
-	}
-}
-
-void dilate(grid& data, std::vector<std::vector<bool> >& mask, const double boundary=0, unsigned char layers=3){
-	std::vector<std::pair<int, int> >cur, next;
-	for (int i = 0; i < mask.size(); ++i)
-		for (int j = 0; j < mask[i].size(); ++j)
-			if (!mask[i][j] && (
-					(i > 0 && mask[i-1][j]) ||
-					(j > 0 && mask[i][j-1]) ||
-					(i+1 < mask.size() && mask[i+1][j]) ||
-					(j+1 < mask[i].size() && mask[i][j+1])
-				))
-				next.push_back(std::make_pair(i, j));
-
-	for (; layers--; swap(cur, next)){
-		for (const std::pair<int, int>& p : cur){
-			if (mask[p.first][p.second])
-				continue;
-			double sum = 0;
-			int count = 0;
-#define CHECK(i,j) do{\
-	if (mask[p.first+(i)][p.second+(j)]){\
-		sum += data[p.first+(i)][p.second+(j)];\
-		++count;\
-	}else\
-		next.push_back(std::make_pair(p.first+(i),p.second+(j)));\
-}while(0)
-			if (p.first)
-				CHECK(-1, 0);
-			if (p.second)
-				CHECK(0, -1);
-			if (p.first+1 < mask.size())
-				CHECK(+1, 0);
-			if (p.second+1 < mask[p.first].size())
-				CHECK(0, +1);
-#undef CHECK
-			data[p.first][p.second] = sum/count;
-		}
-		for (const std::pair<int, int>& p : cur)
-			mask[p.first][p.second] = true;
-	}
-
-	for (int i = 0; i < mask.size(); ++i)
-		for (int j = 0; j < mask[i].size(); ++j)
-			if (!mask[i][j])
-				data[i][j] = boundary;
-}
-
-template<typename T>
-void mask(T& a, const bool& mask_a, const T val){
-	if (!mask_a)
-		a = val;
-}
-
-template<typename T, typename B, typename V>
-void mask(std::vector<T>& a, const std::vector<B>& mask_a, const V val){ // rotate by pi
-	for (int i = 0; i < a.size(); ++i)
-		mask(a[i], mask_a[i], val);
-}
-
 #if 0
 int main(){
 	for (int t = 0; t < T; ++t){
 		// velocity boundary conditions
 		{
-			std::vector<std::vector<bool> > mask_dx = make_grid<bool>(N+1, M), mask_dy = make_grid<bool>(N, M+1);
-			for (int i = 0; i < phi.size(); ++i)
-				for (int j = 0; j < phi[0].size(); ++j)
-					if (phi[i][j] < 0 && (
-							solid_phi[i][j] >= 0 ||
-							solid_phi[i][j+1] >= 0 ||
-							solid_phi[i+1][j] >= 0 ||
-							solid_phi[i+1][j+1] >= 0
-						)){
-						mask_dx[i][j] = mask_dx[i+1][j] = true;
-						mask_dy[i][j] = mask_dy[i][j+1] = true;
-					}
-
-			mask(dx, mask_dx, 0.);
-			mask(dy, mask_dy, 0.);
-			project(solid_phi, dx, dy, phi);
-			rpc("max_abs", std::string("dx"), dx, std::string("dy"), dy);
-			//rpc("deciles", std::string("dx"), dx);
-			//rpc("deciles", std::string("dy"), dy);
-			dilate(dx, mask_dx);
-			dilate(dy, mask_dy);
-
 			grid ndx = dx;
 			for (int i = 0; i < dx.size(); ++i)
 				for (int j = 0; j < dx[0].size(); ++j)
@@ -1032,15 +882,6 @@ while(0)
 							dy[i][j] = uy-(nx*ux+ny*uy)/nn*ny;
 					}
 			dx = std::move(ndx);
-		}
-
-		// advection
-		{
-			std::vector<double>bx, by;
-			interpolate_surface(phi, bx, by);
-			if ((t+1)%redistance_period == 0)
-				redistance(phi, bx, by);
-			rpc("draw", solid_phi, dx, dy, phi, bx, by);
 		}
 	}
 	return 0;
