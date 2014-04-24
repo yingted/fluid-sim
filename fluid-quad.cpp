@@ -684,6 +684,21 @@ void advect(quad *root, std::vector<quad*>& a){
 	advect_velocity(root);
 	advect_phi(root, a);
 }
+void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double>& by){
+	bx.clear();
+	by.clear();
+	root->visit_faces([&bx, &by](quad *p, int j){
+		quad *q = p->neighbour[j];
+		if ((p->phi < 0) == (q->phi < 0))
+			return true;
+		if (q->phi < 0)
+			swap(p, q);
+		const double theta = phi_theta(p->phi, q->phi);
+		bx.push_back((1-theta)*p->x+theta*q->x);
+		by.push_back((1-theta)*p->y+theta*q->y);
+		return true;
+	});
+}
 
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
@@ -693,6 +708,7 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 int main(){
 	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
+	static std::vector<double>bx, by;
 	std::vector<quad*>a;
 
 	a.push_back(root);
@@ -715,7 +731,8 @@ int main(){
 		});
 	}
 	root->check_relations();
-	rpc("draw_quad", a);
+	interpolate_surface(root, bx, by);
+	rpc("draw_quad", a, bx, by);
 
 	for (int t = 0; t < T; ++t){
 		// forces
@@ -743,7 +760,8 @@ int main(){
 				for (int j = 0; j < 4; ++j)
 					a.push_back(a[i]->child[j]);
 		root->check_relations();
-		rpc("draw_quad", a);
+		interpolate_surface(root, bx, by);
+		rpc("draw_quad", a, bx, by);
 	}
 	return 0;
 }
