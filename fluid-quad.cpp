@@ -346,27 +346,36 @@ barycentric:
 		assert(neighbour[i]);
 		return phi_theta(phi, neighbour[i]->phi);
 	}
-	bool visit_neighbours(std::function<bool(quad*, quad*, double, double)>cb){
+	bool visit_neighbours(std::function<bool(quad*, quad*, double, double&)>cb){
 		assert(this);
 		assert(cb);
 		for (int i = 0; i < 4; ++i)
 			if (!neighbour[i])
 				continue;
 			else if(!neighbour[i]->child[0]){
-				if (!cb(this, neighbour[i], n(i), u[i]))
+				double old = u[i];
+				bool quit = !cb(this, neighbour[i], n(i), u[i]);
+				neighbour[i]->u[(i+2)%4] -= u[i]-old;
+				if (quit)
 					return false;
 			}else
 				for (int j = 1; j < 3; ++j){
-					quad *const n = neighbour[i]->child[(i+1)%4];
-					if (!cb(this, n, n->n((i+2)%4), -n->u[(i+2)%4]))
+					quad *const n = neighbour[i]->child[(i+j)%4];
+					double tmp = -n->u[(i+2)%4];
+					bool quit = !cb(this, n, n->n((i+2)%4), tmp);
+					u[i] -= -tmp-n->u[(i+2)%4];
+					n->u[(i+2)%4] = -tmp;
+					if (quit)
 						return false;
 				}
 		return true;
 	}
 	double div(){
 		double ret = 0;
-		visit_neighbours([&ret](quad*, quad*, double n, double u){
-			ret += n*u;
+		visit_neighbours([&ret](quad *p, quad *q, double n, double& u){
+			const double theta = phi_theta(p->phi, q->phi);
+			if (theta)
+				ret += u*n*(1-phi_theta(p->solid_phi, q->solid_phi))/max(1e-2, theta);
 			return true;
 		});
 		return ret;
@@ -530,6 +539,12 @@ int main(){
 			result.clear();
 
 			for (quad *n : a)
+				if (!n->child[0])
+					for (int j = 0; j < 4; ++j)
+						if (!n->neighbour[j])
+							n->u[j] = 0;
+
+			for (quad *n : a)
 				if (!n->child[0] && n->phi < 0){
 					row[n] = rhs.size();
 					rhs.push_back(n->div());
@@ -537,69 +552,40 @@ int main(){
 			SparseMatrix<double>mat(rhs.size());
 			result.resize(rhs.size());
 			for (quad *n : a)
-				if (!n->child[0])
-					for (int j = 0; j < 4; ++j){
-						quad *p = n, *q = p->neighbour[j];
-						double area = !q || !q->child[0] ? p->n(j) : q->n((j+2)%4), w = 1-phi_theta(p->solid_phi, p->solid_phi), theta = .5;
-						if (q == NULL){
-							if (!(p->phi < 0)) // air-wall boundary
-								continue;
-						}else if (!(p->r < q->r || (p->r == q->r && p < q))) // double count
-							continue;
-						if (q){
-							w = 1-phi_theta(p->solid_phi, q->solid_phi),
-							theta = phi_theta(p->phi, q->phi);
-						}
-						if (!theta || !w)
-							continue;
-						w *= area;
-						if (!(p->phi < 0))
-							swap(p, q);
-						assert(p && p->phi < 0);
+				if (!n->child[0] && n->phi < 0)
+					n->visit_neighbours([&mat](quad *p, quad *q, double n, double& u){
+						const double theta = phi_theta(p->phi, q->phi);
+						if (!theta)
+							return true;
+						double w = n*(1-phi_theta(p->solid_phi, q->solid_phi));
 						const int pr = row[p];
-						if (q && q->phi < 0){
-							const int qr = row[q];
-							mat.add_to_element(pr, qr, -w);
-							mat.add_to_element(qr, pr, -w);
-							mat.add_to_element(qr, qr, w);
-						}else
+						if (q->phi < 0)
+							mat.add_to_element(pr, row[q], -w);
+						else
 							w /= max(1e-2, theta);
 						mat.add_to_element(pr, pr, w);
-					}
+						return true;
+					});
 			rpc("check_symmetric", mat);
 			double residual;
 			int iterations;
 			PCGSolver<double>solver;
-//#ifdef NDEBUG
+#ifdef NDEBUG
 			solver.set_solver_parameters(1e-5, 1000, .97, .25);
-//#endif
+#endif
 			//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
 			assert(rhs == rhs);
 			bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
 			std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
-
 			for (quad *n : a)
-				if (!n->child[0])
-					for (int j = 0; j < 4; ++j)
-						if (!n->neighbour[j])
-							n->u[j] = 0;
-			root->visit_faces([](quad *const p, int j){
-				quad *q = p->neighbour[j];
-				double theta = phi_theta(p->phi, q->phi);
-				if (!theta)
-					return true;
-				double pp = 0, qp = 0;
-				if (row.count(p))
-					pp = result[row[p]];
-				if (row.count(q))
-					qp = result[row[q]];
-				theta = max(1e-2, theta)*p->n(j);
-				//std::cerr << q->u[(j+2)%4] << " = -(" << p->u[j] << " += " << (qp-pp)/max(1e-2, theta) << ")"<< std::endl;
-				const double flow = (qp-pp)/theta;
-				p->u[j] += flow;
-				q->u[(j+2)%4] -= flow;
-				return true;
-			});
+				if (!n->child[0] && n->phi < 0)
+					n->visit_neighbours([](quad *p, quad *q, double n, double& u){
+						double pp = row.count(p) ? result[row[p]] : 0,
+						       qp = row.count(q) ? result[row[q]] : 0;
+						if (phi_theta(p->phi, q->phi) && p < q) // pointer comparison
+							u += qp-pp;
+						return true;
+					});
 		}
 		for (quad *n : a)
 			if (!n->child[0] && n->phi < 0)
