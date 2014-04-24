@@ -484,6 +484,207 @@ if (!(n)->neighbour[(k)]){\
 };
 const int quad::cos[4] = {1, 0, -1, 0}, quad::sin[4] = {0, 1, 0, -1};
 
+void reconstruct_velocity(quad *root){
+	static std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
+	unx.clear();
+	uny.clear();
+	nxny.clear();
+	nx2.clear();
+	ny2.clear();
+	root->visit_faces([&](const quad *const p, const int j){
+		quad *const q = p->neighbour[j];
+		assert(!p->child[0] && !q->child[0]);
+		const std::pair<const quad*, const quad*>pq = std::make_pair(p, q), qp = std::make_pair(q, p);
+		const static double epsilon = .001; // XXX adjust
+		double    u = p->u[j],
+				 nx = p->nx(j),
+				 ny = p->ny(j),
+				  n = hypot(nx, ny),
+				 n2 = nx*nx+ny*ny,
+			  w_inv = .25*n2+epsilon*epsilon,
+			divisor = w_inv*w_inv;
+		nx /= n;
+		ny /= n;
+#define FLOW(a,q) do{\
+(a)[pq] += (q);\
+(a)[qp] += (q);\
+}while(0)
+		FLOW(unx, u*nx/divisor); // cell x cell => edge
+		FLOW(uny, u*ny/divisor); // don't premultiply
+		FLOW(nxny, nx*ny/divisor);
+		FLOW(nx2, nx*nx/divisor);
+		FLOW(ny2, ny*ny/divisor);
+#undef FLOW
+		return true;
+	});
+	root->visit_cells([&](quad *const n){
+		double cell_dx_n = 0, cell_dy_n = 0;
+		int i = 0;
+		const bool success = n->visit_my_vertices([&](quad *p, const quad *q, const quad *r, const quad *s){
+			double my_unx = 0, my_uny = 0, my_nxny = 0, my_nx2 = 0, my_ny2 = 0;
+#define VISIT(p,q) do{\
+const std::pair<const quad*, const quad*>pq = std::make_pair(p, q);\
+my_unx += unx[pq];\
+my_uny += uny[pq];\
+my_nxny += nxny[pq];\
+my_nx2 += nx2[pq];\
+my_ny2 += ny2[pq];\
+}while(0)
+			VISIT(p, q); // edge x edge => vertex
+			if (r){
+				VISIT(q, r);
+				VISIT(r, s);
+			}else
+				VISIT(q, s);
+			VISIT(s, p);
+#undef VISIT
+			const double det = my_nxny*my_nxny-my_nx2*my_ny2;
+			if (det){
+				p->dx[i] = (my_nxny*my_uny-my_ny2*my_unx)/det; // vertex* => cell
+				p->dy[i] = (my_nxny*my_unx-my_nx2*my_uny)/det;
+			}else if(my_nx2 || my_nxny || my_ny2){ // always true
+				double A, B, C; // (A, B, C) = (nx2, nxny, unx)+(nxny, ny2, uny)
+				if (my_nxny < 0 && my_nx2){ // can cancel in A, so first-second
+					A = my_nx2-my_nxny; // XXX check if this is the regularized solution
+					B = my_nxny-my_ny2;
+					C = my_unx-my_uny;
+				}else{ // cannot cancel in A, so first+second
+					A = my_nx2+my_nxny;
+					B = my_nxny+my_ny2;
+					C = my_unx+my_uny;
+				}
+				const double coef = C/(A*A+B*B);
+				p->dx[i] = A*coef;
+				p->dy[i] = B*coef;
+			}else{
+				assert(!(my_unx || my_uny)); // corner
+				p->dx[i] = 0;
+				p->dy[i] = 0;
+			}
+			cell_dx_n += p->dx[i  ];
+			cell_dy_n += p->dy[i++];
+			assert(i <= 8);
+			if (i != 8){
+				p->dx[i] = p->dx[0];
+				p->dy[i] = p->dy[0];
+			}
+			return true;
+		});
+		assert(success);
+		n->cell_dx = cell_dx_n/i;
+		n->cell_dy = cell_dy_n/i;
+		return true;
+	});
+}
+
+void project(std::vector<quad*>& a){
+	static std::map<quad*, size_t>row;
+	static std::vector<double>rhs;
+	static std::vector<double>result;
+	row.clear();
+	rhs.clear();
+	result.clear();
+
+	for (quad *n : a)
+		if (!n->child[0])
+			for (int j = 0; j < 4; ++j)
+				if (!n->neighbour[j])
+					n->u[j] = 0;
+
+	for (quad *n : a)
+		if (!n->child[0] && n->phi < 0){
+			row[n] = rhs.size();
+			rhs.push_back(n->div());
+		}
+	SparseMatrix<double>mat(rhs.size());
+	result.resize(rhs.size());
+	for (quad *n : a)
+		if (!n->child[0] && n->phi < 0)
+			n->visit_neighbours([&mat](quad *p, quad *q, double n, double& u){
+				const double theta = phi_theta(p->phi, q->phi);
+				if (!theta)
+					return true;
+				double w = n*(1-phi_theta(p->solid_phi, q->solid_phi));
+				const int pr = row[p];
+				if (q->phi < 0)
+					mat.add_to_element(pr, row[q], -w);
+				else
+					w /= max(1e-2, theta);
+				mat.add_to_element(pr, pr, w);
+				return true;
+			});
+	rpc("check_symmetric", mat);
+	double residual;
+	int iterations;
+	PCGSolver<double>solver;
+#ifdef NDEBUG
+	solver.set_solver_parameters(1e-5, 1000, .97, .25);
+#endif
+	//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
+	assert(rhs == rhs);
+	bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
+	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
+	for (quad *n : a)
+		if (!n->child[0] && n->phi < 0)
+			n->visit_neighbours([](quad *p, quad *q, double n, double& u){
+				double pp = row.count(p) ? result[row[p]] : 0,
+					   qp = row.count(q) ? result[row[q]] : 0;
+				if (phi_theta(p->phi, q->phi) && p < q) // pointer comparison
+					u += qp-pp;
+				return true;
+			});
+#ifndef NDEBUG
+	for (quad *n : a)
+		if (!n->child[0] && n->phi < 0)
+			assert(fabs(n->div()) <= 1e-2);
+#endif
+}
+
+void advect_velocity(quad *root){
+	static std::vector<double>nu;
+	nu.clear();
+	root->visit_faces([root](quad *const p, int j){
+		bool is_slanted_face = p->neighbour[j]->r > p->r;
+		double dx, dy, nx = p->nx(j), ny = p->ny(j),
+			cx = p->x+p->r*quad::cos[j]*(1-is_slanted_face/3.),
+			cy = p->y+p->r*quad::sin[j]*(1-is_slanted_face/3.);
+		p->sample_u(cx, cy, dx, dy);
+		root->query_sample_u(
+			max(root->x-root->r, min(root->x+root->r, cx-dx)),
+			max(root->y-root->r, min(root->y+root->r, cy-dy)), dx, dy);
+		nu.push_back((dx*nx+dy*ny)/hypot(nx, ny));
+		return true;
+	});
+
+	static int i;
+	i = 0;
+	root->visit_faces([](quad *const p, int j){
+		p->neighbour[j]->u[(j+2)%4] = -(p->u[j] = nu[i++]);
+		return true;
+	});
+}
+
+void advect_phi(quad *root, std::vector<quad*>& a){
+	static std::vector<double>phi;
+	phi.clear();
+	phi.resize(a.size());
+	static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
+	for (int i = 0; i < a.size(); ++i)
+		if (!a[i]->child[0]){
+			double dx, dy;
+			root->query_sample_u(a[i]->x, a[i]->y, dx, dy);
+			phi[i] = root->query_sample(a[i]->x-dx, a[i]->y-dy, offsetof(quad, phi));
+		}
+	for (int i = 0; i < a.size(); ++i)
+		if (!a[i]->child[0])
+			a[i]->phi = phi[i];
+}
+
+void advect(quad *root, std::vector<quad*>& a){
+	advect_velocity(root);
+	advect_phi(root, a);
+}
+
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << elt->solid_phi << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
@@ -493,7 +694,6 @@ int main(){
 	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
 	std::vector<quad*>a;
-	std::vector<double>phi;
 
 	a.push_back(root);
 	for (int i = 0; i < a.size(); ++i){
@@ -530,172 +730,11 @@ int main(){
 			return true;
 		});
 
-		{
-			static std::map<quad*, size_t>row;
-			static std::vector<double>rhs;
-			static std::vector<double>result;
-			row.clear();
-			rhs.clear();
-			result.clear();
+		project(a);
 
-			for (quad *n : a)
-				if (!n->child[0])
-					for (int j = 0; j < 4; ++j)
-						if (!n->neighbour[j])
-							n->u[j] = 0;
+		reconstruct_velocity(root);
 
-			for (quad *n : a)
-				if (!n->child[0] && n->phi < 0){
-					row[n] = rhs.size();
-					rhs.push_back(n->div());
-				}
-			SparseMatrix<double>mat(rhs.size());
-			result.resize(rhs.size());
-			for (quad *n : a)
-				if (!n->child[0] && n->phi < 0)
-					n->visit_neighbours([&mat](quad *p, quad *q, double n, double& u){
-						const double theta = phi_theta(p->phi, q->phi);
-						if (!theta)
-							return true;
-						double w = n*(1-phi_theta(p->solid_phi, q->solid_phi));
-						const int pr = row[p];
-						if (q->phi < 0)
-							mat.add_to_element(pr, row[q], -w);
-						else
-							w /= max(1e-2, theta);
-						mat.add_to_element(pr, pr, w);
-						return true;
-					});
-			rpc("check_symmetric", mat);
-			double residual;
-			int iterations;
-			PCGSolver<double>solver;
-#ifdef NDEBUG
-			solver.set_solver_parameters(1e-5, 1000, .97, .25);
-#endif
-			//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
-			assert(rhs == rhs);
-			bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
-			std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
-			for (quad *n : a)
-				if (!n->child[0] && n->phi < 0)
-					n->visit_neighbours([](quad *p, quad *q, double n, double& u){
-						double pp = row.count(p) ? result[row[p]] : 0,
-						       qp = row.count(q) ? result[row[q]] : 0;
-						if (phi_theta(p->phi, q->phi) && p < q) // pointer comparison
-							u += qp-pp;
-						return true;
-					});
-		}
-		for (quad *n : a)
-			if (!n->child[0] && n->phi < 0)
-				assert(fabs(n->div()) <= 1e-2); // XXX fails
-
-		{ // velocity
-			static std::map<std::pair<const quad*, const quad*>, double>unx, uny, nxny, nx2, ny2;
-			unx.clear();
-			uny.clear();
-			nxny.clear();
-			nx2.clear();
-			ny2.clear();
-			root->visit_faces([&](const quad *const p, const int j){
-				quad *const q = p->neighbour[j];
-				assert(!p->child[0] && !q->child[0]);
-				const std::pair<const quad*, const quad*>pq = std::make_pair(p, q), qp = std::make_pair(q, p);
-				const static double epsilon = .001; // XXX adjust
-				double    u = p->u[j],
-					     nx = p->nx(j),
-					     ny = p->ny(j),
-					      n = hypot(nx, ny),
-						 n2 = nx*nx+ny*ny,
-					  w_inv = .25*n2+epsilon*epsilon,
-					divisor = w_inv*w_inv;
-				nx /= n;
-				ny /= n;
-#define FLOW(a,q) do{\
-	(a)[pq] += (q);\
-	(a)[qp] += (q);\
-}while(0)
-				FLOW(unx, u*nx/divisor); // cell x cell => edge
-				FLOW(uny, u*ny/divisor); // don't premultiply
-				FLOW(nxny, nx*ny/divisor);
-				FLOW(nx2, nx*nx/divisor);
-				FLOW(ny2, ny*ny/divisor);
-#undef FLOW
-				return true;
-			});
-			root->visit_cells([&](quad *const n){
-				double cell_dx_n = 0, cell_dy_n = 0;
-				int i = 0;
-				const bool success = n->visit_my_vertices([&](quad *p, const quad *q, const quad *r, const quad *s){
-					double my_unx = 0, my_uny = 0, my_nxny = 0, my_nx2 = 0, my_ny2 = 0;
-#define VISIT(p,q) do{\
-	const std::pair<const quad*, const quad*>pq = std::make_pair(p, q);\
-	my_unx += unx[pq];\
-	my_uny += uny[pq];\
-	my_nxny += nxny[pq];\
-	my_nx2 += nx2[pq];\
-	my_ny2 += ny2[pq];\
-}while(0)
-					VISIT(p, q); // edge x edge => vertex
-					if (r){
-						VISIT(q, r);
-						VISIT(r, s);
-					}else
-						VISIT(q, s);
-					VISIT(s, p);
-#undef VISIT
-					const double det = my_nxny*my_nxny-my_nx2*my_ny2;
-					if (det){
-						p->dx[i] = (my_nxny*my_uny-my_ny2*my_unx)/det; // vertex* => cell
-						p->dy[i] = (my_nxny*my_unx-my_nx2*my_uny)/det;
-					}else if(my_nx2 || my_nxny || my_ny2){ // always true
-						double A, B, C; // (A, B, C) = (nx2, nxny, unx)+(nxny, ny2, uny)
-						if (my_nxny < 0 && my_nx2){ // can cancel in A, so first-second
-							A = my_nx2-my_nxny; // XXX check if this is the regularized solution
-							B = my_nxny-my_ny2;
-							C = my_unx-my_uny;
-						}else{ // cannot cancel in A, so first+second
-							A = my_nx2+my_nxny;
-							B = my_nxny+my_ny2;
-							C = my_unx+my_uny;
-						}
-						const double coef = C/(A*A+B*B);
-						p->dx[i] = A*coef;
-						p->dy[i] = B*coef;
-					}else{
-						assert(!(my_unx || my_uny)); // corner
-						p->dx[i] = 0;
-						p->dy[i] = 0;
-					}
-					cell_dx_n += p->dx[i  ];
-					cell_dy_n += p->dy[i++];
-					assert(i <= 8);
-					if (i != 8){
-						p->dx[i] = p->dx[0];
-						p->dy[i] = p->dy[0];
-					}
-					return true;
-				});
-				assert(success);
-				n->cell_dx = cell_dx_n/i;
-				n->cell_dy = cell_dy_n/i;
-				return true;
-			});
-		}
-
-		phi.clear();
-		phi.resize(a.size());
-		static_assert(std::is_standard_layout<quad>::value, "cannot use offsetof");
-		for (int i = 0; i < a.size(); ++i)
-			if (!a[i]->child[0]){
-				double dx, dy;
-				root->query_sample_u(a[i]->x, a[i]->y, dx, dy);
-				phi[i] = root->query_sample(a[i]->x-dx, a[i]->y-dy, offsetof(quad, phi));
-			}
-		for (int i = 0; i < a.size(); ++i)
-			if (!a[i]->child[0])
-				a[i]->phi = phi[i];
+		advect(root, a);
 
 		a.clear();
 		a.push_back(root);
