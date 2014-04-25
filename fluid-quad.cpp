@@ -373,11 +373,10 @@ barycentric:
 	double div(){
 		double ret = 0;
 		visit_neighbours([&ret](quad *p, quad *q, double n, double& u){
-			const double theta = phi_theta(p->phi, q->phi);
-			if (theta){
+			if (phi_theta(p->phi, q->phi)){
 				double px, py, qx, qy;
 				face_endpoints(p, q, px, py, qx, qy);
-				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)))/max(1e-2, theta);
+				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
 			}
 			return true;
 		});
@@ -636,15 +635,16 @@ void project(std::vector<quad*>& a){
 		if (!n->child[0] && n->phi < 0)
 			n->visit_neighbours([](quad *p, quad *q, double n, double& u){
 				double pp = row.count(p) ? result[row[p]] : 0,
-				       qp = row.count(q) ? result[row[q]] : 0;
-				if (phi_theta(p->phi, q->phi) && (!(q->phi < 0) || p < q)) // pointer comparison
-					u += qp-pp;
+				       qp = row.count(q) ? result[row[q]] : 0,
+				    theta = phi_theta(p->phi, q->phi);
+				if (theta && (!(q->phi < 0) || p < q)) // pointer comparison
+					u += (qp-pp)/max(1e-2, theta);
 				return true;
 			});
 #ifndef NDEBUG
 	for (quad *n : a)
 		if (!n->child[0] && n->phi < 0)
-			assert(fabs(n->div()) <= 1e-4);
+			assert(fabs(n->div()) <= 1e-6);
 #endif
 }
 
