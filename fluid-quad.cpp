@@ -98,6 +98,9 @@ struct quad{ // NULL is the infinite cell
 		}
 	}
 	void check_relations(){
+#ifdef NDEBUG
+		return;
+#endif
 		assert(!parent == (index == -1));
 		if (parent){
 			assert(0 <= index && index < 4);
