@@ -858,4 +858,4 @@ int main(){
 		rpc("draw_quad", a, bx, by);
 	}
 	return 0;
-}
+} // vim: ts=4 sw=4
