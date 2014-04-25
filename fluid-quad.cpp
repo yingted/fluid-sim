@@ -16,9 +16,7 @@
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
 
-double solid_phi(double x, double y){
-	return 1-hypot(x, y); // XXX put in quadtree
-}
+double solid_phi(double x, double y);
 
 double phi_theta(double a, double b){
 	return a < 0 ?
@@ -777,6 +775,11 @@ void extrapolate_solid(std::vector<quad*>& a){
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << solid_phi(elt->x, elt->y) << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
+}
+
+double solid_phi(double x, double y){
+	return 1-hypot(x, y); // XXX put in quadtree
+	//return y+2;
 }
 
 int main(){
