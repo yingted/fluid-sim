@@ -705,8 +705,8 @@ void advect_phi(quad *root, std::vector<quad*>& a){
 }
 
 void advect(quad *root, std::vector<quad*>& a){
-	advect_velocity(root);
 	advect_phi(root, a);
+	advect_velocity(root);
 }
 void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double>& by){
 	typedef std::pair<double, quad*>cell_t;
@@ -748,14 +748,12 @@ void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double
 		const int anc = ancestor[u];
 		double dx_n = 0, dy_n = 0, valid_area = 0;
 #define SEEN (dist.count(v) && (dist[v] < d || (dist[v] == d && v < u)))
-		u->visit_neighbours([&, anc, d](quad *u, quad *v, double area, double& flow){
-			if (!(u->phi < 0)){ // air
-				if (SEEN || v->phi < 0){ // valid
-					const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
-					valid_area += area;
-					dx_n += nx/n*(area*flow);
-					dy_n += ny/n*(area*flow);
-				}
+		u->visit_neighbours([&, d](quad *u, quad *v, double area, double& flow){
+			if (!(u->phi < 0) && (SEEN || v->phi < 0)){ // air and valid
+				const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
+				valid_area += area;
+				dx_n += nx/n*(area*flow);
+				dy_n += ny/n*(area*flow);
 			}
 			return true;
 		});
@@ -791,11 +789,13 @@ void extrapolate_solid(std::vector<quad*>& a){
 
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
-	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << solid_phi(elt->x, elt->y) << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
+	double dx, dy;
+	elt->query_sample_u(elt->x, elt->y, dx, dy);
+	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << solid_phi(elt->x, elt->y) << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << ",\"dx\":" << dx << ",\"dy\":" << dy << "}";
 }
 
 double solid_phi(double x, double y){
-	return 1-hypot(x, y); // XXX put in quadtree
+	return .9-hypot(x, y); // XXX put in quadtree
 	//return y+2;
 }
 

@@ -193,7 +193,7 @@ def draw_quad(cells, bx, by):
 	glDisableClientState(GL_VERTEX_ARRAY)
 
 	glutSwapBuffers()
-def _draw_quad_vecs(solid_phi, phi, x, y, r):
+def _draw_quad_vecs(solid_phi, phi, x, y, r, dx, dy):
 	N = len(r)
 	glEnableClientState(GL_VERTEX_ARRAY)
 	lx = x-r
@@ -215,6 +215,11 @@ def _draw_quad_vecs(solid_phi, phi, x, y, r):
 	faces = np.roll(cells.reshape(-1, 4, 2).repeat(2, axis=1), 1, axis=1).reshape(-1, 2)
 	glVertexPointerf(faces)
 	glDrawArrays(GL_LINES, 0, len(faces))
+
+	glColor3f(1, 0, 1)
+	streamlines = np.array([x, y, x+dx, y+dy]).transpose().reshape(-1, 2)
+	glVertexPointerf(streamlines)
+	glDrawArrays(GL_LINES, 0, len(streamlines))
 	glDisableClientState(GL_VERTEX_ARRAY)
 def convert_param(param):
 	if isinstance(param, dict):
