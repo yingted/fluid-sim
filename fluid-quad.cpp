@@ -16,6 +16,10 @@
 #include <sparse_matrix.h>
 #include <pcg_solver.h>
 
+double solid_phi(double x, double y){
+	return 1-hypot(x, y); // XXX put in quadtree
+}
+
 double phi_theta(double a, double b){
 	return a < 0 ?
 		b < 0 ?
@@ -46,9 +50,8 @@ struct quad{ // NULL is the infinite cell
 	const int index;
 	const double r, x, y;
 	const static int cos[4], sin[4];
-	double u[4], solid_phi, phi, dx[8], dy[8], cell_dx, cell_dy;
+	double u[4], phi, dx[8], dy[8], cell_dx, cell_dy;
 	void copy_from(const quad *o){
-		solid_phi = o->solid_phi;
 		phi = o->phi;
 		for (int i = 0; i < 4; ++i)
 			u[i] = o->u[i];
@@ -61,7 +64,6 @@ struct quad{ // NULL is the infinite cell
 	}
 	quad ghost_cell(){
 		quad ret(nan("ghost"), nan("ghost"), nan("ghost"));
-		ret.solid_phi = -solid_phi;
 		ret.phi = phi;
 		for (int i = 0; i < 4; ++i)
 			ret.u[i] = u[i];
@@ -374,8 +376,11 @@ barycentric:
 		double ret = 0;
 		visit_neighbours([&ret](quad *p, quad *q, double n, double& u){
 			const double theta = phi_theta(p->phi, q->phi);
-			if (theta)
-				ret += u*n*(1-phi_theta(p->solid_phi, q->solid_phi))/max(1e-2, theta);
+			if (theta){
+				double px, py, qx, qy;
+				face_endpoints(p, q, px, py, qx, qy);
+				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)))/max(1e-2, theta);
+			}
 			return true;
 		});
 		return ret;
@@ -602,9 +607,13 @@ void project(std::vector<quad*>& a){
 		if (!n->child[0] && n->phi < 0)
 			n->visit_neighbours([&mat](quad *p, quad *q, double n, double& u){
 				const double theta = phi_theta(p->phi, q->phi);
-				if (!theta)
+				double px, py, qx, qy;
+				quad::face_endpoints(p, q, px, py, qx, qy);
+				double w = n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
+				if (!theta || !w){
+					u = 0;
 					return true;
-				double w = n*(1-phi_theta(p->solid_phi, q->solid_phi));
+				}
 				const int pr = row[p];
 				if (q->phi < 0)
 					mat.add_to_element(pr, row[q], -w);
@@ -613,6 +622,7 @@ void project(std::vector<quad*>& a){
 				mat.add_to_element(pr, pr, w);
 				return true;
 			});
+
 	rpc("check_symmetric", mat);
 	double residual;
 	int iterations;
@@ -636,7 +646,7 @@ void project(std::vector<quad*>& a){
 #ifndef NDEBUG
 	for (quad *n : a)
 		if (!n->child[0] && n->phi < 0)
-			assert(fabs(n->div()) <= 1e-2);
+			assert(fabs(n->div()) <= 1e-4);
 #endif
 }
 
@@ -755,24 +765,22 @@ void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double
 
 void extrapolate_solid(std::vector<quad*>& a){
 	for (quad *p : a)
-		if (!p->child[0] && p->solid_phi < 0)
+		if (!p->child[0])
 			p->visit_neighbours([](quad *p, quad *q, double n, double& u){
-				if (q->solid_phi < 0){
-					const double delta = q->solid_phi-p->solid_phi,
-					              cos2 = delta*delta/((q->x-p->x)*(q->x-p->x)+(q->y-p->y)*(q->y-p->y));
-					u *= sqrt(max(0., min(1., 1-cos2)));
-				}
+				double px, py, qx, qy;
+				quad::face_endpoints(p, q, px, py, qx, qy);
+				u *= fabs(solid_phi(qx, qy)-solid_phi(px, py))/hypot(q->x-p->x, q->y-p->y);
 				return true;
 			});
 }
 
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
-	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << elt->solid_phi << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
+	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << solid_phi(elt->x, elt->y) << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 50;
+	const double gx = 0, gy = -.05, T = 100;
 	quad *root = new quad(0, 0, 1);
 	static std::vector<double>bx, by;
 	std::vector<quad*>a;
@@ -781,16 +789,14 @@ int main(){
 	for (int i = 0; i < a.size(); ++i){
 		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
-		c->solid_phi = 1-hypot(c->x, c->y);
-		c->phi = max(-c->solid_phi, c->x+.25*c->y);
-		//c->solid_phi = 1;
+		c->phi = max(-solid_phi(c->x, c->y), c->x+.25*c->y);
 		//c->phi = c->y;
 		for (int i = 0; i < 4; ++i)
 			c->u[i] = 0;
 		for (int i = 0; i < 8; ++i)
 			c->dx[i] = c->dy[i] = 0;
 		c->cell_dx = c->cell_dy = 0;
-		if (c->r < (min(fabs(c->solid_phi), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
+		if (c->r < (min(fabs(solid_phi(c->x, c->y)), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
 			continue;
 		c->split([&a](quad *n){
 			a.push_back(n);
@@ -835,72 +841,3 @@ int main(){
 	}
 	return 0;
 }
-
-// old code
-
-#if 0
-int main(){
-	for (int t = 0; t < T; ++t){
-		// velocity boundary conditions
-		{
-			grid ndx = dx;
-			for (int i = 0; i < dx.size(); ++i)
-				for (int j = 0; j < dx[0].size(); ++j)
-					if (THETA_X(i, j) == 0 && mask_dx[i][j]){
-						const int i_lo = max(0, i-1), i_hi = min(((int)dx.size())-1, i+1);
-						double plus = solid_phi[i_hi][j+1]-solid_phi[i_lo][j],
-						      minus = solid_phi[i_hi][j]-solid_phi[i_lo][j+1],
-						         nx = (plus+minus)/(i_hi-i_lo),
-						         ny = plus-minus,
-						         ux = dx[i][j],
-						         uy = 0,
-						         nn = nx*nx+ny*ny,
-						 neighbours = 0;
-#define CHECK(i2,j2) do\
-	if (mask_dy[(i2)][(j2)]){\
-		uy += dy[(i2)][(j2)];\
-		neighbours += 1;\
-	}\
-while(0)
-						CHECK(i_lo, j);
-						CHECK(i_lo, j+1);
-						CHECK(i_hi-1, j);
-						CHECK(i_hi-1, j+1);
-#undef CHECK
-						uy /= neighbours;
-						if (nn)
-							ndx[i][j] = ux-(nx*ux+ny*uy)/nn*nx;
-					}
-			for (int i = 0; i < dy.size(); ++i)
-				for (int j = 0; j < dy[0].size(); ++j)
-					if (THETA_Y(i, j) == 0 && mask_dy[i][j]){
-						const int j_lo = max(0, j-1), j_hi = min(((int)dy[0].size())-1, j+1);
-						double plus = solid_phi[i+1][j_hi]-solid_phi[i][j_lo],
-						      minus = solid_phi[i+1][j_lo]-solid_phi[i][j_hi],
-						         nx = plus+minus,
-						         ny = (plus-minus)/(j_hi-j_lo),
-						         ux = 0,
-						         uy = dy[i][j],
-						         nn = nx*nx+ny*ny,
-						 neighbours = 0;
-#define CHECK(i2,j2) do\
-	if (mask_dx[(i2)][(j2)]){\
-		ux += dx[(i2)][(j2)];\
-		neighbours += 1;\
-	}\
-while(0)
-						CHECK(i, j_lo);
-						CHECK(i+1, j_lo);
-						CHECK(i, j_hi-1);
-						CHECK(i+1, j_hi-1);
-#undef CHECK
-						ux /= neighbours;
-						if (nn)
-							dy[i][j] = uy-(nx*ux+ny*uy)/nn*ny;
-					}
-			dx = std::move(ndx);
-		}
-	}
-	return 0;
-} // vim: set ts=4 sw=4 noet:
-#endif
