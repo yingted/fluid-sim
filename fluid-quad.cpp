@@ -311,6 +311,19 @@ barycentric:
 		assert(!isnan(dx));
 		assert(!isnan(dy));
 		assert(!failed);
+		sx += x;
+		sy += y;
+		const double sp = solid_phi(sx, sy);
+		if (sp < 0){
+			const static double eps = pow(2, -((53+1)/3));
+			const double eps_x = max(1e-6, fabs(sx))*eps,
+			             eps_y = max(1e-6, fabs(sy))*eps,
+			                rx = (solid_phi(sx+eps_x, sy)-sp)/eps_x,
+			                ry = (solid_phi(sx, sy+eps_y)-sp)/eps_y,
+			                 r = (dx*rx+dy*ry)/(rx*rx+ry*ry);
+			dx -= r*rx;
+			dy -= r*ry;
+		}
 	}
 	void split(std::function<void(quad*)>cb=NULL){ // XXX check shared edge condition
 		for (int i = 0; i < 4; ++i)
@@ -762,12 +775,13 @@ void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double
 }
 
 void extrapolate_solid(std::vector<quad*>& a){
+	return;
 	for (quad *p : a)
 		if (!p->child[0])
 			p->visit_neighbours([](quad *p, quad *q, double n, double& u){
 				double px, py, qx, qy;
 				quad::face_endpoints(p, q, px, py, qx, qy);
-				u *= fabs(solid_phi(qx, qy)-solid_phi(px, py))/hypot(q->x-p->x, q->y-p->y);
+				u *= fabs(solid_phi(qx, qy)-solid_phi(px, py))/hypot(qx-px, qy-py);
 				return true;
 			});
 }
@@ -783,7 +797,7 @@ double solid_phi(double x, double y){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 100;
+	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
 	static std::vector<double>bx, by;
 	std::vector<quad*>a;
@@ -799,7 +813,8 @@ int main(){
 		for (int i = 0; i < 8; ++i)
 			c->dx[i] = c->dy[i] = 0;
 		c->cell_dx = c->cell_dy = 0;
-		if (c->r < (min(fabs(solid_phi(c->x, c->y)), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
+		//if (c->r < (min(fabs(solid_phi(c->x, c->y)), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
+		if (c->r < 3e-2)
 			continue;
 		c->split([&a](quad *n){
 			a.push_back(n);
