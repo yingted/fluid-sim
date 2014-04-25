@@ -753,6 +753,19 @@ void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double
 	});
 }
 
+void extrapolate_solid(std::vector<quad*>& a){
+	for (quad *p : a)
+		if (!p->child[0] && p->solid_phi < 0)
+			p->visit_neighbours([](quad *p, quad *q, double n, double& u){
+				if (q->solid_phi < 0){
+					const double delta = q->solid_phi-p->solid_phi,
+					              cos2 = delta*delta/((q->x-p->x)*(q->x-p->x)+(q->y-p->y)*(q->y-p->y));
+					u *= sqrt(max(0., min(1., 1-cos2)));
+				}
+				return true;
+			});
+}
+
 template<>
 void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 	os << "{\"phi\":" << elt->phi << ",\"solid_phi\":" << elt->solid_phi << ",\"x\":" << elt->x << ",\"y\":" << elt->y << ",\"r\":" << elt->r << ",\"leaf\":" << !elt->child[0] << "}";
@@ -768,10 +781,10 @@ int main(){
 	for (int i = 0; i < a.size(); ++i){
 		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
-		//c->solid_phi = 1-hypot(c->x, c->y);
-		//c->phi = max(-c->solid_phi, c->x+.25*c->y);
-		c->solid_phi = 1;
-		c->phi = c->y;
+		c->solid_phi = 1-hypot(c->x, c->y);
+		c->phi = max(-c->solid_phi, c->x+.25*c->y);
+		//c->solid_phi = 1;
+		//c->phi = c->y;
 		for (int i = 0; i < 4; ++i)
 			c->u[i] = 0;
 		for (int i = 0; i < 8; ++i)
@@ -806,14 +819,18 @@ int main(){
 
 		advect(root, a);
 
+		root->check_relations();
 		a.clear();
 		a.push_back(root);
 		for (int i = 0; i < a.size(); ++i)
 			if (a[i]->child[0])
 				for (int j = 0; j < 4; ++j)
 					a.push_back(a[i]->child[j]);
-		root->check_relations();
+
 		interpolate_surface(root, bx, by);
+
+		extrapolate_solid(a);
+
 		rpc("draw_quad", a, bx, by);
 	}
 	return 0;
