@@ -72,6 +72,9 @@ def opengl(w, h, frameskip=False):
 				traceback.print_exc()
 				thread.interrupt_main()
 				thread.exit()
+		def keyboard(key, x, y):
+			if key == '\x1b':
+				sys.exit()
 		def ret(*args):
 			lock.acquire()
 			dirty[0] = True
@@ -87,6 +90,7 @@ def opengl(w, h, frameskip=False):
 				ret.window = glutCreateWindow(redraw.__name__)
 				glutIdleFunc(idle)
 				glutDisplayFunc(display)
+				glutKeyboardFunc(keyboard)
 				lock.release()
 				glutMainLoop()
 			parent[0] = threading.current_thread()

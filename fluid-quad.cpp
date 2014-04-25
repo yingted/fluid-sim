@@ -314,6 +314,7 @@ barycentric:
 		assert(!isnan(dx));
 		assert(!isnan(dy));
 		assert(!failed);
+		//return;
 		sx += x;
 		sy += y;
 		const double sp = solid_phi(sx, sy);
@@ -392,6 +393,7 @@ barycentric:
 			if (phi_theta(p->phi, q->phi)){
 				double px, py, qx, qy;
 				face_endpoints(p, q, px, py, qx, qy);
+				assert(n == hypot(qx-px, qy-py));
 				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
 			}
 			return true;
@@ -631,7 +633,7 @@ void project(std::vector<quad*>& a){
 				if (q->phi < 0)
 					mat.add_to_element(pr, row[q], -w);
 				else
-					w /= max(1e-2, theta);
+					w /= max(1e-6, theta);
 				mat.add_to_element(pr, pr, w);
 				return true;
 			});
@@ -646,15 +648,18 @@ void project(std::vector<quad*>& a){
 	//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
 	assert(rhs == rhs);
 	bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
-	std::cerr << "residual = " << residual << " iterations = " << iterations << " success = " << success << std::endl;
+	std::cerr << "cells = " << rhs.size();
+	if (rhs.size())
+		std::cerr << " residual = " << residual << " iterations = " << iterations << " success = " << success;
+	std::cerr << std::endl;
 	for (quad *n : a)
 		if (!n->child[0] && n->phi < 0)
 			n->visit_neighbours([](quad *p, quad *q, double n, double& u){
-				double pp = row.count(p) ? result[row[p]] : 0,
-				       qp = row.count(q) ? result[row[q]] : 0,
-				    theta = phi_theta(p->phi, q->phi);
+				const double pp = row.count(p) ? result[row[p]] : 0,
+				             qp = row.count(q) ? result[row[q]] : 0,
+				          theta = phi_theta(p->phi, q->phi);
 				if (theta && (!(q->phi < 0) || p < q)) // pointer comparison
-					u += (qp-pp)/max(1e-2, theta);
+					u += (qp-pp)/max(1e-6, theta);
 				return true;
 			});
 #ifndef NDEBUG
@@ -669,14 +674,14 @@ void advect_velocity(quad *root){
 	nu.clear();
 	root->visit_faces([root](quad *const p, int j){
 		bool is_slanted_face = p->neighbour[j]->r > p->r;
-		double dx, dy, nx = p->nx(j), ny = p->ny(j),
+		double dx, dy, dx2, dy2, nx = p->nx(j), ny = p->ny(j),
 			cx = p->x+p->r*quad::cos[j]*(1-is_slanted_face/3.),
 			cy = p->y+p->r*quad::sin[j]*(1-is_slanted_face/3.);
 		p->sample_u(cx, cy, dx, dy);
 		root->query_sample_u(
 			max(root->x-root->r, min(root->x+root->r, cx-dx)),
-			max(root->y-root->r, min(root->y+root->r, cy-dy)), dx, dy);
-		nu.push_back((dx*nx+dy*ny)/hypot(nx, ny));
+			max(root->y-root->r, min(root->y+root->r, cy-dy)), dx2, dy2);
+		nu.push_back(.5*((dx+dx2)*nx+(dy+dy2)*ny)/hypot(nx, ny));
 		return true;
 	});
 
@@ -705,8 +710,8 @@ void advect_phi(quad *root, std::vector<quad*>& a){
 }
 
 void advect(quad *root, std::vector<quad*>& a){
-	advect_phi(root, a);
 	advect_velocity(root);
+	advect_phi(root, a);
 }
 void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double>& by){
 	typedef std::pair<double, quad*>cell_t;
@@ -752,21 +757,27 @@ void interpolate_surface(quad *root, std::vector<double>& bx, std::vector<double
 			if (!(u->phi < 0) && (SEEN || v->phi < 0)){ // air and valid
 				const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
 				valid_area += area;
+//std::cerr << "(" << nx/n*(area*flow) << ", " << ny/n*(area*flow) << ") ";
 				dx_n += nx/n*(area*flow);
 				dy_n += ny/n*(area*flow);
 			}
 			return true;
 		});
+//if (valid_area)
+//	std::cerr << "=> (" << dx_n << ", " << dy_n << ")/" << valid_area << " =>";
 		u->visit_neighbours([=](quad *u, quad *v, double area, double& flow){
 			const bool seen = SEEN;
 			if (!(u->phi < 0) && !(seen || v->phi < 0)){ // air and invalid
 				const double nx = v->x-u->x, ny = v->y-u->y, n = hypot(nx, ny);
+//std::cerr << " " << (nx*dx_n+ny*dy_n)/(n*valid_area);
 				flow = (nx*dx_n+ny*dy_n)/(n*valid_area);
 			}
 			if (!seen)
 				NEIGH(v, anc);
 			return true;
 		});
+//if (valid_area)
+//	std::cerr << std::endl;
 #undef SEEN
 	}
 	root->visit_cells([](quad *n){
@@ -800,7 +811,7 @@ double solid_phi(double x, double y){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 50;
+	const double gx = 0, gy = -.05, T = 5;
 	quad *root = new quad(0, 0, 1);
 	static std::vector<double>bx, by;
 	std::vector<quad*>a;
@@ -810,6 +821,7 @@ int main(){
 		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
 		c->phi = max(-solid_phi(c->x, c->y), c->x+.25*c->y);
+		//c->phi = c->x+.25*c->y;
 		//c->phi = c->y;
 		for (int i = 0; i < 4; ++i)
 			c->u[i] = 0;
@@ -828,8 +840,7 @@ int main(){
 	rpc("draw_quad", a, bx, by);
 
 	for (int t = 0; t < T; ++t){
-		// forces
-		root->visit_faces([gx, gy](quad *const p, int j){
+		root->visit_faces([gx, gy](quad *const p, int j){ // forces
 			quad *const q = p->neighbour[j];
 			if (p->phi < 0 || q->phi < 0){
 				//const double flow = (gx*p->nx(j)+gy*p->ny(j))*p->theta(j);
@@ -839,13 +850,11 @@ int main(){
 			}
 			return true;
 		});
-
 		project(a);
-
+		interpolate_surface(root, bx, by);
+		extrapolate_solid(a);
 		reconstruct_velocity(root);
-
 		advect(root, a);
-
 		root->check_relations();
 		a.clear();
 		a.push_back(root);
@@ -853,11 +862,6 @@ int main(){
 			if (a[i]->child[0])
 				for (int j = 0; j < 4; ++j)
 					a.push_back(a[i]->child[j]);
-
-		interpolate_surface(root, bx, by);
-
-		extrapolate_solid(a);
-
 		rpc("draw_quad", a, bx, by);
 	}
 	return 0;
