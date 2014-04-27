@@ -394,7 +394,7 @@ barycentric:
 				double px, py, qx, qy;
 				face_endpoints(p, q, px, py, qx, qy);
 				assert(n == hypot(qx-px, qy-py));
-				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
+				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)))/hypot(q->x-p->x, q->y-p->y);
 			}
 			return true;
 		});
@@ -624,11 +624,12 @@ void project(std::vector<quad*>& a){
 				const double theta = phi_theta(p->phi, q->phi);
 				double px, py, qx, qy;
 				quad::face_endpoints(p, q, px, py, qx, qy);
-				double w = n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
+				double w = 1-phi_theta(solid_phi(px, py), solid_phi(qx, qy));
 				if (!theta || !w){
 					u = 0;
 					return true;
 				}
+				w *= n/hypot(q->x-p->x, q->y-p->y);
 				const int pr = row[p];
 				if (q->phi < 0)
 					mat.add_to_element(pr, row[q], -w);
@@ -665,7 +666,7 @@ void project(std::vector<quad*>& a){
 #ifndef NDEBUG
 	for (quad *n : a)
 		if (!n->child[0] && n->phi < 0)
-			assert(fabs(n->div()) <= 1e-6);
+			assert(fabs(n->div()) <= 1e-4);
 #endif
 }
 
