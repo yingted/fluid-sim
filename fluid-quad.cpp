@@ -692,12 +692,8 @@ void project(std::vector<quad*>& a){
 				return true;
 			});
 #ifndef NDEBUG
-	double worst = 0;
-	for (quad *n : a)
-		if (!n->child[0] && n->phi < 0)
-			worst = max(worst, fabs(n->div()));
-			//assert(fabs(n->div()) <= 1e-6);
-	std::cerr << "worst = " << worst << std::endl;
+	for (std::pair<quad *, size_t>e : row)
+		assert(fabs(e.first->div()) <= 1e-6);
 #endif
 }
 
