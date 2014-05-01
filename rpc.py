@@ -12,6 +12,8 @@ import termios
 import struct
 import itertools
 import operator
+import code
+import os
 from OpenGL.GL import *
 from OpenGL.GLU import *
 from OpenGL.GLUT import *
@@ -27,11 +29,29 @@ def _square(mat):
 	if mat.shape[1] < mat.shape[0]:
 		mat = np.concatenate((mat, [[0]*(mat.shape[0]-mat.shape[1])]*len(mat)), axis=1)
 	return mat
+readfunc_file = None
+def readfunc(prompt):
+	global readfunc_file
+	if readfunc_file is None:
+		readfunc_file = os.fdopen(sys.stderr.fileno(), 'w+')
+	readfunc_file.write(prompt)
+	readfunc_file.flush()
+	ret = readfunc_file.readline()
+	if not ret:
+		raise EOFError
+	return ret[:-1]
 def check_symmetric(mat):
 	mat = _square(mat)
 	for row, col in zip(*np.nonzero(mat != mat.transpose())):
 		if row < col:
 			print "not symmetric", row, col, mat[row, col], mat[col, row]
+	assert np.allclose(mat, mat.transpose())
+	try:
+		np.linalg.inv(mat)
+	except np.linalg.LinAlgError:
+		print "cannot invert", np.linalg.eigh(mat)[0]
+		code.interact(readfunc=readfunc, local=locals())
+		#sys.exit(1)
 def max_abs(*args):
 	print "max_abs",
 	for arg in args:

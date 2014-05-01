@@ -256,9 +256,9 @@ barycentric:
 		assert(!failed);
 		return ret;
 	}
-	static void face_endpoints(quad *c, quad *q, double& px, double& py, double& qx, double& qy){
+	static void face_offsets(const quad *c, const quad *q, double& px, double& py, double& qx, double& qy){ // relative to c
 		if(q->r < c->r){
-			face_endpoints(q, c, qx, qy, px, py);
+			face_offsets(q, c, qx, qy, px, py);
 			qx += q->x-c->x;
 			px += q->x-c->x;
 			qy += q->y-c->y;
@@ -291,6 +291,13 @@ barycentric:
 		qx = cx+dcx;
 		qy = cy+dcy;
 	}
+	static void face_endpoints(const quad *c, const quad *q, double& px, double& py, double& qx, double& qy){
+		face_offsets(c, q, px, py, qx, qy);
+		px += c->x;
+		qx += c->x;
+		py += c->y;
+		qy += c->y;
+	}
 	void sample_u(double sx, double sy, double& dx, double& dy)const{
 		assert(!child[0]);
 		sx -= x;
@@ -299,7 +306,7 @@ barycentric:
 		int i = 0;
 		const bool failed = (const_cast<quad*>(this))->visit_my_vertices([sx, sy, &i, &dx, &dy](quad *c, quad *p, quad*, quad *q){
 			double D, Dpl, Dql, Drl, px, py, qx, qy;
-			face_endpoints(c, q, px, py, qx, qy);
+			face_offsets(c, q, px, py, qx, qy);
 			if (barycentric(px, py, qx, qy, sx, sy, D, Dpl, Dql, Drl)){
 				assert(D || !(Dpl || Dql || Drl));
 				dx = (Dpl*c->dx[i]+Dql*c->dx[(i+1)%8]+Drl*c->cell_dx)/(D ? D : 1);
@@ -624,38 +631,32 @@ void project(std::vector<quad*>& a){
 					return true;
 				}
 
-				int pr, qr;
-				if (row.count(p))
-					pr = row[p];
-				else{
-					pr = rhs.size();
-					row[p] = pr;
-					rhs.push_back(p->div());
-				}
-				if (row.count(q))
-					qr = row[q];
-				else{
-					qr = row.size();
-					row[q] = qr;
-					rhs.push_back(q->div());
-				}
-				assert(row.size() == rhs.size());
-				mat.resize(rhs.size());
+				auto get_row = [&](quad *n){
+					if (row.count(n))
+						return row[n];
+					const size_t i = rhs.size();
+					rhs.push_back(n->div());
+					row[n] = i;
+					assert(row.size() == rhs.size());
+					mat.resize(rhs.size());
+					return i;
+				};
 
 				if (solid) // partial solid face
 					theta = 1; // activate cells
 				w *= n/hypot(q->x-p->x, q->y-p->y);
 				if (theta == 1) // both active
-					mat.add_to_element(pr, qr, -w);
+					mat.add_to_element(get_row(p), get_row(q), -w);
 				else if (!(p->phi < 0)) // one inactive, p
 					return true;
 				else // one inactive, q
 					w /= max(1e-6, theta);
+				const int pr = get_row(p);
 				mat.add_to_element(pr, pr, w);
 				return true;
 			});
 #ifndef NDEBUG
-	for (std::pair<quad *, size_t>e : row)
+	for (std::pair<quad*, size_t>e : row)
 		assert(rhs[e.second] == e.first->div());
 #endif
 
@@ -688,12 +689,17 @@ void project(std::vector<quad*>& a){
 				if (solid) // partial solid face
 					theta = 1; // activate cells
 				if (p < q) // pointer comparison
+					//u += (qp-pp)/(max(1e-6, theta)*hypot(q->x-p->x, q->y-p->y));
 					u += (qp-pp)/(max(1e-6, theta)*hypot(q->x-p->x, q->y-p->y));
 				return true;
 			});
 #ifndef NDEBUG
-	for (std::pair<quad *, size_t>e : row)
-		assert(fabs(e.first->div()) <= 1e-6);
+	double worst = 0;
+	for (std::pair<quad*, size_t>e : row){
+		//assert(fabs(e.first->div()) <= 1e-6);
+		worst = max(worst, fabs(e.first->div()));
+	}
+	std::cerr << "worst = " << worst << std::endl;
 #endif
 }
 
@@ -857,7 +863,7 @@ int main(){
 			c->dx[i] = c->dy[i] = 0;
 		c->cell_dx = c->cell_dy = 0;
 		//if (c->r < (min(fabs(solid_phi(c->x, c->y)), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
-		if (c->r < 3e-2)
+		if (c->r < 1e-1)
 			continue;
 		c->split([&a](quad *n){
 			a.push_back(n);
