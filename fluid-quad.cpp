@@ -314,7 +314,7 @@ barycentric:
 		assert(!isnan(dx));
 		assert(!isnan(dy));
 		assert(!failed);
-		//return;
+		return;
 		sx += x;
 		sy += y;
 		const double sp = solid_phi(sx, sy);
@@ -394,7 +394,7 @@ barycentric:
 				double px, py, qx, qy;
 				face_endpoints(p, q, px, py, qx, qy);
 				assert(n == hypot(qx-px, qy-py));
-				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)))/hypot(q->x-p->x, q->y-p->y);
+				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
 			}
 			return true;
 		});
@@ -611,33 +611,53 @@ void project(std::vector<quad*>& a){
 				if (!n->neighbour[j])
 					n->u[j] = 0;
 
+	SparseMatrix<double>mat(0);
 	for (quad *n : a)
-		if (!n->child[0] && n->phi < 0){
-			row[n] = rhs.size();
-			rhs.push_back(n->div());
-		}
-	SparseMatrix<double>mat(rhs.size());
-	result.resize(rhs.size());
-	for (quad *n : a)
-		if (!n->child[0] && n->phi < 0)
+		if (!n->child[0])
 			n->visit_neighbours([&mat](quad *p, quad *q, double n, double& u){
-				const double theta = phi_theta(p->phi, q->phi);
+				double theta = phi_theta(p->phi, q->phi);
 				double px, py, qx, qy;
 				quad::face_endpoints(p, q, px, py, qx, qy);
-				double w = 1-phi_theta(solid_phi(px, py), solid_phi(qx, qy));
+				double solid = phi_theta(solid_phi(px, py), solid_phi(qx, qy)), w = 1-solid;
 				if (!theta || !w){
 					u = 0;
 					return true;
 				}
+
+				int pr, qr;
+				if (row.count(p))
+					pr = row[p];
+				else{
+					pr = rhs.size();
+					row[p] = pr;
+					rhs.push_back(p->div());
+				}
+				if (row.count(q))
+					qr = row[q];
+				else{
+					qr = row.size();
+					row[q] = qr;
+					rhs.push_back(q->div());
+				}
+				assert(row.size() == rhs.size());
+				mat.resize(rhs.size());
+
+				if (solid) // partial solid face
+					theta = 1; // activate cells
 				w *= n/hypot(q->x-p->x, q->y-p->y);
-				const int pr = row[p];
-				if (q->phi < 0)
-					mat.add_to_element(pr, row[q], -w);
-				else
+				if (theta == 1) // both active
+					mat.add_to_element(pr, qr, -w);
+				else if (!(p->phi < 0)) // one inactive, p
+					return true;
+				else // one inactive, q
 					w /= max(1e-6, theta);
 				mat.add_to_element(pr, pr, w);
 				return true;
 			});
+#ifndef NDEBUG
+	for (std::pair<quad *, size_t>e : row)
+		assert(rhs[e.second] == e.first->div());
+#endif
 
 	rpc("check_symmetric", mat);
 	double residual;
@@ -648,25 +668,36 @@ void project(std::vector<quad*>& a){
 #endif
 	//std::cerr << "mat = " << mat << " rhs = " << rhs << std::endl;
 	assert(rhs == rhs);
+	result.resize(rhs.size());
 	bool success = !rhs.size() || solver.solve(mat, rhs, result, residual, iterations);
 	std::cerr << "cells = " << rhs.size();
 	if (rhs.size())
 		std::cerr << " residual = " << residual << " iterations = " << iterations << " success = " << success;
 	std::cerr << std::endl;
 	for (quad *n : a)
-		if (!n->child[0] && n->phi < 0)
+		if (!n->child[0])
 			n->visit_neighbours([](quad *p, quad *q, double n, double& u){
-				const double pp = row.count(p) ? result[row[p]] : 0,
-				             qp = row.count(q) ? result[row[q]] : 0,
-				          theta = phi_theta(p->phi, q->phi);
-				if (theta && (!(q->phi < 0) || p < q)) // pointer comparison
-					u += (qp-pp)/max(1e-6, theta);
+				double pp = row.count(p) ? result[row[p]] : 0,
+				       qp = row.count(q) ? result[row[q]] : 0,
+				    theta = phi_theta(p->phi, q->phi);
+				double px, py, qx, qy;
+				quad::face_endpoints(p, q, px, py, qx, qy);
+				double solid = phi_theta(solid_phi(px, py), solid_phi(qx, qy)), w = 1-solid;
+				if (!theta || !w)
+					return true;
+				if (solid) // partial solid face
+					theta = 1; // activate cells
+				if (p < q) // pointer comparison
+					u += (qp-pp)/(max(1e-6, theta)*hypot(q->x-p->x, q->y-p->y));
 				return true;
 			});
 #ifndef NDEBUG
+	double worst = 0;
 	for (quad *n : a)
 		if (!n->child[0] && n->phi < 0)
-			assert(fabs(n->div()) <= 1e-4);
+			worst = max(worst, fabs(n->div()));
+			//assert(fabs(n->div()) <= 1e-6);
+	std::cerr << "worst = " << worst << std::endl;
 #endif
 }
 
