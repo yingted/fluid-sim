@@ -401,6 +401,9 @@ barycentric:
 				double px, py, qx, qy;
 				face_endpoints(p, q, px, py, qx, qy);
 				assert(n == hypot(qx-px, qy-py));
+double px2, py2, qx2, qy2;
+face_endpoints(p, q, px2, py2, qx2, qy2);
+assert(px2 == px && qx2 == qx && py2 == py && qy2 == qy);
 				ret += u*n*(1-phi_theta(solid_phi(px, py), solid_phi(qx, qy)));
 			}
 			return true;
@@ -650,7 +653,7 @@ void project(std::vector<quad*>& a){
 				else if (!(p->phi < 0)) // one inactive, p
 					return true;
 				else // one inactive, q
-					w /= max(1e-6, theta);
+					w /= max(1e-2, theta);
 				const int pr = get_row(p);
 				mat.add_to_element(pr, pr, w);
 				return true;
@@ -686,11 +689,11 @@ void project(std::vector<quad*>& a){
 				double solid = phi_theta(solid_phi(px, py), solid_phi(qx, qy)), w = 1-solid;
 				if (!theta || !w)
 					return true;
+				assert(row.count(p) || row.count(q));
 				if (solid) // partial solid face
 					theta = 1; // activate cells
 				if (p < q) // pointer comparison
-					//u += (qp-pp)/(max(1e-6, theta)*hypot(q->x-p->x, q->y-p->y));
-					u += (qp-pp)/(max(1e-6, theta)*hypot(q->x-p->x, q->y-p->y));
+					u += (qp-pp)/(max(1e-2, theta)*hypot(q->x-p->x, q->y-p->y));
 				return true;
 			});
 #ifndef NDEBUG
@@ -840,12 +843,13 @@ void _print_array_contents<quad*>(std::ostream& os, quad *const& elt){
 }
 
 double solid_phi(double x, double y){
-	return .9-hypot(x, y); // XXX put in quadtree
+	return .25*(x+y);
+	//return .9-hypot(x, y); // XXX put in quadtree
 	//return y+2;
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 5;
+	const double gx = 0, gy = -.05, T = 20;
 	quad *root = new quad(0, 0, 1);
 	static std::vector<double>bx, by;
 	std::vector<quad*>a;
@@ -854,7 +858,8 @@ int main(){
 	for (int i = 0; i < a.size(); ++i){
 		quad *const c = a[i];
 		//std::cerr << c->x << ", " << c->y << ", " << c->r << std::endl;
-		c->phi = max(-solid_phi(c->x, c->y), c->x+.25*c->y);
+		c->phi = max(-solid_phi(c->x, c->y), 0.24253562503633297*c->x+0.9701425001453319*c->y);
+		//c->phi = max(-solid_phi(c->x, c->y), c->x+.25*c->y);
 		//c->phi = c->x+.25*c->y;
 		//c->phi = c->y;
 		for (int i = 0; i < 4; ++i)
@@ -863,7 +868,7 @@ int main(){
 			c->dx[i] = c->dy[i] = 0;
 		c->cell_dx = c->cell_dy = 0;
 		//if (c->r < (min(fabs(solid_phi(c->x, c->y)), fabs(c->phi)) < 1.42e-1 ? 1e-2 : 1e-1))
-		if (c->r < 1e-1)
+		if (c->r < 3e-2)
 			continue;
 		c->split([&a](quad *n){
 			a.push_back(n);
