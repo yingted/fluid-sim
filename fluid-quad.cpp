@@ -849,7 +849,7 @@ double solid_phi(double x, double y){
 }
 
 int main(){
-	const double gx = 0, gy = -.05, T = 20;
+	const double gx = 0, gy = -.05, T = 50;
 	quad *root = new quad(0, 0, 1);
 	static std::vector<double>bx, by;
 	std::vector<quad*>a;

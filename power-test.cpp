@@ -37,7 +37,7 @@ public:
 	virtual bool operator()() = 0;
 	virtual void report(){};
 	virtual void feed(bool (*cb)(rand_bool&)){
-		while (cb(*this) && this->next());
+		while (cb(*this) && next());
 	}
 protected:
 	virtual bool next() = 0; // cannot be called after returning false
@@ -185,11 +185,10 @@ bool test_octree(rand_bool& rng){
 		int count = hit_counter["octrees"], wrap = 10;
 		Vector_3 origin = 5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap);
 #endif
+		Vector_3 u_vec = T.dual(u)-CGAL::ORIGIN;
 		do{
-			Cell_circulator v = u;
-			++v;
 #ifdef OUTPUT
-			const Point o = T.dual(u)+origin;
+			const Point o = u_dual+origin;
 #ifdef EXACT_OUTPUT
 			const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
 			CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
@@ -200,8 +199,11 @@ bool test_octree(rand_bool& rng){
 #endif
 			++vertices;
 #endif
-			area2 = area2+cross_product(T.dual(u)-CGAL::ORIGIN, T.dual(v)-CGAL::ORIGIN);
-		}while(++u != end);
+			++u;
+			Vector_3 v_vec = T.dual(u)-CGAL::ORIGIN;
+			area2 = area2+cross_product(u_vec, v_vec);
+			u_vec = v_vec;
+		}while(u != end);
 #ifdef OUTPUT
 		obj << 'f';
 		for (int i = old_vertices+1; i <= vertices; ++i)
