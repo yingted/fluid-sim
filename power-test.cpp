@@ -183,12 +183,12 @@ bool test_octree(rand_bool& rng){
 		static int vertices = 0;
 		int old_vertices = vertices;
 		int count = hit_counter["octrees"], wrap = 10;
-		Vector_3 origin = 5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap);
+		Point origin = CGAL::ORIGIN+(5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap));
 #endif
 		Vector_3 u_vec = T.dual(u)-CGAL::ORIGIN;
 		do{
 #ifdef OUTPUT
-			const Point o = u_dual+origin;
+			const Point o = origin+u_vec;
 #ifdef EXACT_OUTPUT
 			const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
 			CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
