@@ -198,9 +198,19 @@ bool test_octree(rand_bool& rng){
 	//std::cout << "cells (including ghost): " << pts.size() << std::endl;
 	//for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
 	//	std::cout << *it << std::endl;
-	if (check_uniqueness(CGAL::centroid(pts.begin(), pts.end(), CGAL::Dimension_tag<0>())) == -1) {
-		++hit_counter["pruned centroid"];
-		goto end;
+	{
+		std::multiset<Weighted_point, symmetric_cmp> pts_m(pts.begin(), pts.end());
+		for (auto it = pts_m.begin(); it != pts_m.end();) {
+			const auto it_e = pts_m.upper_bound(*it);
+			switch (check_uniqueness(CGAL::centroid(it, it_e, CGAL::Dimension_tag<0>()))) {
+				case -1:
+					++hit_counter["pruned centroid"];
+					goto end;
+				case 1:
+					goto triangulate;
+			}
+			it = it_e;
+		}
 	}
 triangulate:
 	{
