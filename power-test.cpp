@@ -1,6 +1,9 @@
 // taken from CGAL-4.4:examples/Triangulation_3/regular_3.cpp
 #include <CGAL/Regular_triangulation_3.h>
 #include <CGAL/Regular_triangulation_euclidean_traits_3.h>
+#include <CGAL/centroid.h>
+#include <CGAL/barycenter.h>
+#include <CGAL/bounding_box.h>
 #include <boost/random/variate_generator.hpp>
 #include <boost/nondet_random.hpp>
 #include <boost/random/bernoulli_distribution.hpp>
@@ -147,73 +150,87 @@ time_t start, last;
 std::ofstream obj(OUTPUT);
 #endif
 
+bool has_duplicate(const Point p) {
+	if (p.x() < 0 || p.y() < 0 || p.z() < 0)
+		return true;
+	return !(p.x() <= p.y() && p.y() <= p.z());
+}
+
 bool test_octree(rand_bool& rng){
 	std::set<Weighted_point>pts;
 	rand_pts(pts, Point(0, 0, 0), 1, rng);
 	//std::cout << "cells (including ghost): " << pts.size() << std::endl;
 	//for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
 	//	std::cout << *it << std::endl;
-	Rt T;
-	ptrdiff_t num_inserted = T.insert(pts.begin(), pts.end());
-	assert(pts.size() == num_inserted); // check for hidden XXX need to change traits
-	assert(T.is_valid());
-	//std::cout << "faces: " << T.number_of_finite_edges() << std::endl;
-	for (Finite_edges_iterator it = T.finite_edges_begin(); it != T.finite_edges_end(); ++it){
-		Weighted_point a = it->first->vertex(it->second)->point(),
-		               b = it->first->vertex(it->third)->point();
-		switch (domain.has_on_unbounded_side(a)+domain.has_on_unbounded_side(b)){
-			case 0:
-				++hit_counter["interior faces"];
-				break;
-			case 1:
-				++hit_counter["border faces"]; // XXX need to check this
-#ifdef BORDER
-				break;
-#endif
-				continue;
-			case 2:
-				++hit_counter["ghost faces"];
-				continue;
+	if (!pts.empty()) {
+		if (has_duplicate(CGAL::centroid(pts.begin(), pts.end(), CGAL::Dimension_tag<0>()))) {
+			++hit_counter["pruned centroid"];
+			goto end;
 		}
-
-		Vector_3 area2(0, 0, 0);
-		Cell_circulator u = T.incident_cells(*it), end = u; // loop through vertices
-		assert(u != 0);
-#ifdef OUTPUT
-		static int vertices = 0;
-		int old_vertices = vertices;
-		int count = hit_counter["octrees"], wrap = 10;
-		Point origin = CGAL::ORIGIN+(5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap));
-#endif
-		Vector_3 u_vec = T.dual(u)-CGAL::ORIGIN;
-		do{
-#ifdef OUTPUT
-			const Point o = origin+u_vec;
-#ifdef EXACT_OUTPUT
-			const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
-			CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
-			            w = integral_division(w0, gcd(w0, z.denominator()))*z.denominator();
-			obj << "v " << (x*w).numerator() << ' ' << (y*w).numerator() << ' ' << (z*w).numerator() << ' ' << w << '\n';
-#else
-			obj << "v " << o << '\n';
-#endif
-			++vertices;
-#endif
-			++u;
-			Vector_3 v_vec = T.dual(u)-CGAL::ORIGIN;
-			area2 = area2+cross_product(u_vec, v_vec);
-			u_vec = v_vec;
-		}while(u != end);
-#ifdef OUTPUT
-		obj << 'f';
-		for (int i = old_vertices+1; i <= vertices; ++i)
-			obj << ' ' << i;
-		obj << '\n';
-#endif
-		Weight w = CGAL::min(a.weight(), b.weight()); // normalize by smaller weight
-		++area_counter[area2.squared_length()/(16*w*w/9)];
 	}
+	{
+		Rt T;
+		ptrdiff_t num_inserted = T.insert(pts.begin(), pts.end());
+		assert(pts.size() == num_inserted); // check for hidden XXX need to change traits
+		assert(T.is_valid());
+		//std::cout << "faces: " << T.number_of_finite_edges() << std::endl;
+		for (Finite_edges_iterator it = T.finite_edges_begin(); it != T.finite_edges_end(); ++it){
+			Weighted_point a = it->first->vertex(it->second)->point(),
+						   b = it->first->vertex(it->third)->point();
+			switch (domain.has_on_unbounded_side(a)+domain.has_on_unbounded_side(b)){
+				case 0:
+					++hit_counter["interior faces"];
+					break;
+				case 1:
+					++hit_counter["border faces"]; // XXX need to check this
+#ifdef BORDER
+					break;
+#endif
+					continue;
+				case 2:
+					++hit_counter["ghost faces"];
+					continue;
+			}
 
+			Vector_3 area2(0, 0, 0);
+			Cell_circulator u = T.incident_cells(*it), end = u; // loop through vertices
+			assert(u != 0);
+#ifdef OUTPUT
+			static int vertices = 0;
+			int old_vertices = vertices;
+			int count = hit_counter["octrees"], wrap = 10;
+			Point origin = CGAL::ORIGIN+(5*Vector_3(count/wrap/wrap, count/wrap%wrap, count%wrap));
+#endif
+			Vector_3 u_vec = T.dual(u)-CGAL::ORIGIN;
+			do{
+#ifdef OUTPUT
+				const Point o = origin+u_vec;
+#ifdef EXACT_OUTPUT
+				const CGAL::Gmpq x = o.x().exact(), y = o.y().exact(), z = o.z().exact();
+				CGAL::Gmpz w0 = integral_division(x.denominator(), gcd(x.denominator(), y.denominator()))*y.denominator(),
+							w = integral_division(w0, gcd(w0, z.denominator()))*z.denominator();
+				obj << "v " << (x*w).numerator() << ' ' << (y*w).numerator() << ' ' << (z*w).numerator() << ' ' << w << '\n';
+#else
+				obj << "v " << o << '\n';
+#endif
+				++vertices;
+#endif
+				++u;
+				Vector_3 v_vec = T.dual(u)-CGAL::ORIGIN;
+				area2 = area2+cross_product(u_vec, v_vec);
+				u_vec = v_vec;
+			}while(u != end);
+#ifdef OUTPUT
+			obj << 'f';
+			for (int i = old_vertices+1; i <= vertices; ++i)
+				obj << ' ' << i;
+			obj << '\n';
+#endif
+			Weight w = CGAL::min(a.weight(), b.weight()); // normalize by smaller weight
+			++area_counter[area2.squared_length()/(16*w*w/9)];
+		}
+	}
+end:
 	{
 		const int tested_count = ++hit_counter["octrees"];
 		const static int period = 5;
