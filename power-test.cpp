@@ -203,7 +203,8 @@ bool test_octree(rand_bool& rng){
 		std::multiset<Weighted_point, symmetric_cmp> pts_m(pts.begin(), pts.end());
 		for (auto it = pts_m.begin(); it != pts_m.end();) {
 			const auto it_e = pts_m.upper_bound(*it);
-			switch (check_uniqueness(CGAL::centroid(it, it_e, CGAL::Dimension_tag<0>()))) {
+			std::vector<Weighted_point> pts_cur(it, it_e);
+			switch (check_uniqueness(CGAL::centroid(pts_cur.begin(), pts_cur.end(), CGAL::Dimension_tag<0>()))) {
 				case -1:
 					++hit_counter["pruned centroid"];
 					goto end;
