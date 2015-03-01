@@ -151,9 +151,7 @@ std::ofstream obj(OUTPUT);
 #endif
 
 bool has_duplicate(const Point p) {
-	if (p.x() < 0 || p.y() < 0 || p.z() < 0)
-		return true;
-	return !(p.x() <= p.y() && p.y() <= p.z());
+	return p.x() < 0 || p.y() < 0 || p.z() < 0 || p.y() < p.x() || p.z() < p.y();
 }
 
 bool test_octree(rand_bool& rng){
