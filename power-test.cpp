@@ -4,6 +4,8 @@
 #include <CGAL/centroid.h>
 #include <CGAL/barycenter.h>
 #include <CGAL/bounding_box.h>
+#include <CGAL/enum.h>
+#include <CGAL/Origin.h>
 #include <boost/random/variate_generator.hpp>
 #include <boost/nondet_random.hpp>
 #include <boost/random/bernoulli_distribution.hpp>
@@ -11,6 +13,7 @@
 #include <cassert>
 #include <vector>
 #include <queue>
+#include <set>
 
 #ifdef EXACT
 #include <CGAL/Exact_predicates_exact_constructions_kernel.h>
@@ -150,22 +153,68 @@ time_t start, last;
 std::ofstream obj(OUTPUT);
 #endif
 
-bool has_duplicate(const Point p) {
-	return p.x() < 0 || p.y() < 0 || p.z() < 0 || p.y() < p.x() || p.z() < p.y();
+int check_uniqueness(const Point p) {
+	auto c_x = CGAL::compare(p.x(), 0);
+	if (c_x == CGAL::SMALLER)
+		return -1;
+	auto c_y = CGAL::compare(p.y(), 0);
+	if (c_y == CGAL::SMALLER)
+		return -1;
+	auto c_z = CGAL::compare(p.z(), 0);
+	if (c_z == CGAL::SMALLER)
+		return -1;
+	bool l_x = c_x == CGAL::LARGER;
+	bool l_y = c_y == CGAL::LARGER;
+	bool l_z = c_z == CGAL::LARGER;
+	if (l_x && l_y && l_z)
+		return 1;
+	if (!(l_x <= l_y && l_y <= l_z))
+		return -1;
+	return 0;
 }
+
+const static Point ORIGIN(CGAL::ORIGIN);
+
+struct symmetric_cmp {
+	bool operator()(const Weighted_point a, const Weighted_point b) const {
+		switch (CGAL::compare(a.weight(), b.weight())) {
+			case CGAL::SMALLER:
+				return false;
+			case CGAL::LARGER:
+				return true;
+		}
+		switch (CGAL::compare_distance_to_point(ORIGIN, a.point(), b.point())) {
+			case CGAL::SMALLER:
+				return true;
+			case CGAL::LARGER:
+				return false;
+		}
+		return false;
+	}
+};
 
 bool test_octree(rand_bool& rng){
 	std::set<Weighted_point>pts;
-	rand_pts(pts, Point(0, 0, 0), 1, rng);
+	rand_pts(pts, ORIGIN, 1, rng);
 	//std::cout << "cells (including ghost): " << pts.size() << std::endl;
 	//for (std::set<Weighted_point>::const_iterator it = pts.begin(); it != pts.end(); ++it)
 	//	std::cout << *it << std::endl;
-	if (!pts.empty()) {
-		if (has_duplicate(CGAL::centroid(pts.begin(), pts.end(), CGAL::Dimension_tag<0>()))) {
-			++hit_counter["pruned centroid"];
-			goto end;
+	{
+		std::multiset<Weighted_point, symmetric_cmp> pts_m(pts.begin(), pts.end());
+		for (auto it = pts_m.begin(); it != pts_m.end();) {
+			const auto it_e = pts_m.upper_bound(*it);
+			std::vector<Weighted_point> pts_cur(it, it_e);
+			switch (check_uniqueness(CGAL::centroid(pts_cur.begin(), pts_cur.end(), CGAL::Dimension_tag<0>()))) {
+				case -1:
+					++hit_counter["pruned centroid"];
+					goto end;
+				case 1:
+					goto triangulate;
+			}
+			it = it_e;
 		}
 	}
+triangulate:
 	{
 		Rt T;
 		ptrdiff_t num_inserted = T.insert(pts.begin(), pts.end());
