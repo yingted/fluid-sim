@@ -153,24 +153,23 @@ time_t start, last;
 std::ofstream obj(OUTPUT);
 #endif
 
-int check_uniqueness(const Point p) {
-	auto c_x = CGAL::compare(p.x(), 0);
-	if (c_x == CGAL::SMALLER)
+int check_uniqueness(const Point p) { // 0 <= x <= y <= z
+	auto c_0_x = CGAL::compare(0, p.x());
+	auto c_0_y = CGAL::compare(0, p.y());
+	auto c_0_z = CGAL::compare(0, p.z());
+	auto c_x_y = CGAL::compare(p.x(), p.y());
+	auto c_y_z = CGAL::compare(p.y(), p.z());
+	if (c_0_x == CGAL::EQUAL || c_0_y == CGAL::EQUAL || c_0_z == CGAL::EQUAL) // x=0, y=0, z=0
+		return 0;
+	if (c_x_y == CGAL::EQUAL || c_y_z == CGAL::EQUAL || p.z() == p.x()) // x=y, y=z, z=x
+		return 0;
+	if (c_0_x == CGAL::LARGER)
 		return -1;
-	auto c_y = CGAL::compare(p.y(), 0);
-	if (c_y == CGAL::SMALLER)
+	if (c_x_y == CGAL::LARGER)
 		return -1;
-	auto c_z = CGAL::compare(p.z(), 0);
-	if (c_z == CGAL::SMALLER)
+	if (c_y_z == CGAL::LARGER)
 		return -1;
-	bool l_x = c_x == CGAL::LARGER;
-	bool l_y = c_y == CGAL::LARGER;
-	bool l_z = c_z == CGAL::LARGER;
-	if (l_x && l_y && l_z)
-		return 1;
-	if (!(l_x <= l_y && l_y <= l_z))
-		return -1;
-	return 0;
+	return 1;
 }
 
 const static Point ORIGIN(CGAL::ORIGIN);
